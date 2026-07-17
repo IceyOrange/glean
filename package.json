@@ -7,12 +7,12 @@
   "author": "Lovegood",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Lovegood/glean.git"
+    "url": "git+https://github.com/IceyOrange/glean.git"
   },
   "bugs": {
-    "url": "https://github.com/Lovegood/glean/issues"
+    "url": "https://github.com/IceyOrange/glean/issues"
   },
-  "homepage": "https://github.com/Lovegood/glean#readme",
+  "homepage": "https://github.com/IceyOrange/glean#readme",
   "keywords": [
     "browser-extension",
     "chrome-extension",

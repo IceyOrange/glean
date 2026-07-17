@@ -84,4 +84,4 @@ All cards are stored locally in `chrome.storage.local` by default. AI and cloud-
 
 ---
 
-Made with care by [Lovegood](https://github.com/Lovegood).
+Made with care by [IceyOrange](https://github.com/IceyOrange).
