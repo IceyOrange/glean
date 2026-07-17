@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Glean",
+    "description": "Extension name"
+  },
+  "appDesc": {
+    "message": "采集金句与你的感想——一次一张卡片。",
+    "description": "Extension description shown in the store and browser UI"
+  }
+}

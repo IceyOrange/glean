@@ -1,0 +1,239 @@
+import { useEffect, useState } from "react";
+import { Cloud, Check, AlertCircle, Loader2 } from "lucide-react";
+import {
+  SyncProvider,
+  SavedSyncConfig,
+  ProviderConfig,
+  SyncResult,
+  getSyncConfig,
+  saveSyncConfig,
+  makeDefaultConfig,
+  getProviderMeta,
+  getAdapter,
+  syncCards,
+} from "@/lib/sync";
+import { getCards } from "@/lib/storage";
+
+interface SyncSettingsProps {
+  tr: (key: string, vars?: Record<string, string | number>) => string;
+}
+
+const PROVIDERS: SyncProvider[] = ["notion", "nutstore"];
+
+function formatTime(timestamp: number | undefined, tr: SyncSettingsProps["tr"]) {
+  if (!timestamp) return tr("syncNever");
+  return new Date(timestamp).toLocaleString();
+}
+
+export function SyncSettings({ tr }: SyncSettingsProps) {
+  const [config, setConfig] = useState<SavedSyncConfig | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<SyncResult | null>(null);
+
+  useEffect(() => {
+    getSyncConfig().then(setConfig);
+  }, []);
+
+  const updateConfig = (patch: Partial<SavedSyncConfig>) => {
+    setConfig((prev) => {
+      const next = { ...(prev ?? { provider: "notion" as SyncProvider, enabled: false, config: makeDefaultConfig("notion") }), ...patch };
+      void saveSyncConfig(next);
+      return next;
+    });
+  };
+
+  const updateProviderConfig = (patch: Partial<ProviderConfig>) => {
+    setConfig((prev) => {
+      if (!prev) return null;
+      const next = { ...prev, config: { ...prev.config, ...patch } };
+      void saveSyncConfig(next);
+      return next;
+    });
+  };
+
+  const handleProviderChange = (provider: SyncProvider) => {
+    updateConfig({ provider, config: makeDefaultConfig(provider) });
+  };
+
+  const handleSync = async () => {
+    if (!config) return;
+    const adapter = getAdapter(config.provider);
+    const error = adapter.validate(config.config);
+    if (error) {
+      setResult({ ok: false, error: tr("syncConfigIncomplete") });
+      return;
+    }
+
+    setLoading(true);
+    setResult(null);
+    const cards = await getCards();
+    const res = await syncCards(cards);
+    setResult(res);
+    setLoading(false);
+
+    // Refresh saved config to pick up lastSyncAt / lastError.
+    const saved = await getSyncConfig();
+    if (saved) setConfig(saved);
+  };
+
+  const provider = config?.provider ?? "notion";
+  const providerConfig = config?.config ?? makeDefaultConfig(provider);
+  const meta = getProviderMeta(provider);
+
+  const inputCls =
+    "w-full px-3 py-2 text-sm bg-surface rounded-lg border border-line outline-none transition-shadow placeholder:text-ink-300 focus:border-seal/50 focus:ring-2 focus:ring-seal/20 text-ink-900";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-ink-600">
+          <Cloud size={14} />
+          <span className="text-xs font-medium">{tr("syncProvider")}</span>
+        </div>
+        <div className="flex gap-1 bg-line-soft rounded-lg p-1">
+          {PROVIDERS.map((p) => (
+            <button
+              key={p}
+              onClick={() => handleProviderChange(p)}
+              className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                provider === p
+                  ? "bg-ink-900 text-paper shadow-sm"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              {tr(p === "notion" ? "syncNotion" : "syncNutstore")}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-[11px] text-ink-400 leading-relaxed">
+        {tr(meta.descriptionKey)}
+      </p>
+
+      {provider === "notion" && (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-ink-600 mb-1">{tr("syncToken")}</label>
+            <input
+              type="password"
+              value={(providerConfig as { token: string }).token}
+              onChange={(e) => updateProviderConfig({ token: e.target.value })}
+              placeholder="secret_..."
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-ink-600 mb-1">{tr("syncDatabaseId")}</label>
+            <input
+              type="text"
+              value={(providerConfig as { databaseId?: string }).databaseId ?? ""}
+              onChange={(e) =>
+                updateProviderConfig({ databaseId: e.target.value || undefined })
+              }
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className={inputCls}
+            />
+          </div>
+        </div>
+      )}
+
+      {provider === "nutstore" && (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-ink-600 mb-1">{tr("syncServerUrl")}</label>
+            <input
+              type="url"
+              value={(providerConfig as { serverUrl: string }).serverUrl}
+              onChange={(e) => updateProviderConfig({ serverUrl: e.target.value })}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-ink-600 mb-1">{tr("syncUsername")}</label>
+            <input
+              type="text"
+              value={(providerConfig as { username: string }).username}
+              onChange={(e) => updateProviderConfig({ username: e.target.value })}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-ink-600 mb-1">{tr("syncPassword")}</label>
+            <input
+              type="password"
+              value={(providerConfig as { password: string }).password}
+              onChange={(e) => updateProviderConfig({ password: e.target.value })}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-ink-600 mb-1">{tr("syncRemotePath")}</label>
+            <input
+              type="text"
+              value={(providerConfig as { remotePath: string }).remotePath}
+              onChange={(e) => updateProviderConfig({ remotePath: e.target.value })}
+              className={inputCls}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => updateConfig({ enabled: !config?.enabled })}
+          className={`relative w-7 h-4 rounded-full transition-colors ${
+            config?.enabled ? "bg-seal" : "bg-line"
+          }`}
+          aria-checked={config?.enabled}
+          role="switch"
+        >
+          <span
+            className={`absolute top-[2px] w-3 h-3 bg-paper rounded-full transition-all ${
+              config?.enabled ? "left-[16px]" : "left-[2px]"
+            }`}
+          />
+        </button>
+        <span className="text-xs text-ink-600">{tr("syncEnable")}</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleSync}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-paper bg-ink-900 rounded-lg hover:bg-ink-600 disabled:opacity-50 transition-colors"
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <Cloud size={12} />}
+          {tr("syncNow")}
+        </button>
+      </div>
+
+      {result && (
+        <div
+          className={`flex items-start gap-1.5 text-[11px] ${
+            result.ok ? "text-sage" : "text-seal"
+          }`}
+        >
+          {result.ok ? <Check size={12} /> : <AlertCircle size={12} />}
+          <span>
+            {result.ok
+              ? tr("syncSuccess")
+              : result.error}
+          </span>
+        </div>
+      )}
+
+      {!result && config?.lastSyncAt && !config.lastError && (
+        <p className="text-[11px] text-ink-400">
+          {tr("syncLastSuccess", { time: formatTime(config.lastSyncAt, tr) })}
+        </p>
+      )}
+
+      {config?.lastError && !result && (
+        <p className="text-[11px] text-seal">
+          {tr("syncLastError", { error: config.lastError })}
+        </p>
+      )}
+    </div>
+  );
+}

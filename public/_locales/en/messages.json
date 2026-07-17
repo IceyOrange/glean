@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Glean",
+    "description": "Extension name"
+  },
+  "appDesc": {
+    "message": "Capture quotes and your thoughts — one card at a time.",
+    "description": "Extension description shown in the store and browser UI"
+  }
+}

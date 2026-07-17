@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes toast-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes stat-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.25);
+    color: oklch(var(--seal));
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ── Literata (display serif for quotes, numerals, wordmark) ── */
+@font-face {
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("/fonts/literata-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Literata";
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("/fonts/literata-italic-latin.woff2") format("woff2");
+}
+
+@layer base {
+  /* Theme tokens as OKLCH channels — dark mode is a pure variable swap */
+  :root,
+  .light {
+    --paper: 97.4% 0.008 90;
+    --surface: 99.2% 0.004 90;
+    --ink-900: 29% 0.02 80;
+    --ink-600: 45% 0.015 80;
+    --ink-400: 60% 0.012 85;
+    --ink-300: 72% 0.01 88;
+    --line: 90% 0.008 90;
+    --line-soft: 94% 0.006 90;
+    --seal: 52% 0.14 38;
+    --seal-soft: 94% 0.03 40;
+    --ochre: 60% 0.1 78;
+    --sage: 54% 0.06 155;
+  }
+
+  .dark {
+    --paper: 25% 0.015 80;
+    --surface: 29.5% 0.016 80;
+    --ink-900: 93% 0.008 90;
+    --ink-600: 78% 0.01 85;
+    --ink-400: 62% 0.012 85;
+    --ink-300: 50% 0.012 85;
+    --line: 38% 0.014 82;
+    --line-soft: 33% 0.013 82;
+    --seal: 63% 0.16 38;
+    --seal-soft: 34% 0.06 40;
+    --ochre: 70% 0.1 78;
+    --sage: 68% 0.08 155;
+  }
+
+  body {
+    @apply bg-paper text-ink-900 font-sans antialiased;
+  }
+
+  ::selection {
+    @apply bg-seal-soft text-ink-900;
+  }
+
+  /* Quiet, consistent focus ring everywhere */
+  *:focus-visible {
+    outline: 2px solid oklch(var(--seal) / 0.45);
+    outline-offset: 1px;
+    border-radius: 2px;
+  }
+
+  /* Slim scrollbar for the history page */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-line;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-300;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
