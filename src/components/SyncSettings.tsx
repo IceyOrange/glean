@@ -34,6 +34,15 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
     getSyncConfig().then(setConfig);
   }, []);
 
+  // Create or clear the periodic sync alarm whenever the user toggles sync.
+  useEffect(() => {
+    if (config?.enabled) {
+      chrome.alarms.create("glean-sync", { periodInMinutes: 60 });
+    } else {
+      chrome.alarms.clear("glean-sync");
+    }
+  }, [config?.enabled]);
+
   const updateConfig = (patch: Partial<SavedSyncConfig>) => {
     setConfig((prev) => {
       const next = { ...(prev ?? { provider: "notion" as SyncProvider, enabled: false, config: makeDefaultConfig("notion") }), ...patch };

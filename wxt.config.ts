@@ -7,7 +7,7 @@ export default defineConfig({
     name: "__MSG_appName__",
     description: "__MSG_appDesc__",
     default_locale: "en",
-    permissions: ["storage", "history"],
+    permissions: ["storage", "history", "alarms"],
     browser_specific_settings: {
       gecko: {
         id: "glean@lovegood.dev",
