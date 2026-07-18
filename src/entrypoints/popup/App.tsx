@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Card } from "@/lib/types";
 import { getCards } from "@/lib/storage";
-import { ChevronRight, PenLine, Settings, ChevronLeft } from "lucide-react";
+import { BookOpen, PenLine, Settings, ChevronLeft } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import { getLang, setLang, t, type Lang } from "@/lib/i18n";
 import { siteColor } from "@/lib/ui";
@@ -94,21 +94,13 @@ export default function App() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => openHistory()}
-              className="flex items-center gap-0.5 px-2 py-1.5 text-xs text-ink-400 hover:text-seal rounded-lg transition-colors"
-            >
-              {tr("history")} <ChevronRight size={12} />
-            </button>
-            <button
-              onClick={() => setView("settings")}
-              className="p-1.5 text-ink-400 hover:text-ink-600 hover:bg-surface rounded-lg transition-colors"
-              title={tr("settings")}
-            >
-              <Settings size={15} />
-            </button>
-          </div>
+          <button
+            onClick={() => setView("settings")}
+            className="p-1.5 text-ink-400 hover:text-ink-600 hover:bg-surface rounded-lg transition-colors"
+            title={tr("settings")}
+          >
+            <Settings size={15} />
+          </button>
         </div>
 
         {/* Stats — reading-journal summary */}
@@ -158,6 +150,14 @@ export default function App() {
             )}
           </div>
         </div>
+
+        <button
+          onClick={() => openHistory()}
+          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-ink-900 text-paper text-[13px] font-medium rounded-xl hover:bg-ink-800 active:scale-[0.98] transition-all"
+        >
+          <BookOpen size={15} />
+          {tr("openJournal")}
+        </button>
       </header>
 
       {/* Recent quotes */}

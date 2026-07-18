@@ -6,7 +6,7 @@ const translations: Record<Lang, Record<string, string>> = {
   zh: {
     // Popup
     title: "Glean",
-    history: "历史",
+    openJournal: "灵感库",
     total: "总计",
     thoughts: "感想",
     today: "今日",
@@ -170,7 +170,7 @@ const translations: Record<Lang, Record<string, string>> = {
   en: {
     // Popup
     title: "Glean",
-    history: "History",
+    openJournal: "Journal",
     total: "Total",
     thoughts: "Thoughts",
     today: "Today",
@@ -334,7 +334,7 @@ const translations: Record<Lang, Record<string, string>> = {
   fr: {
     // Popup
     title: "Glean",
-    history: "Historique",
+    openJournal: "Journal",
     total: "Total",
     thoughts: "Réflexions",
     today: "Aujourd'hui",
