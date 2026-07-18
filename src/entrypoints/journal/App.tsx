@@ -42,14 +42,12 @@ export default function App() {
   const [mindsetLoading, setMindsetLoading] = useState(false);
   const [mindsetError, setMindsetError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [showExport, setShowExport] = useState(false);
   const [lang, setLangState] = useState<Lang>("zh");
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  const exportRef = useRef<HTMLDivElement>(null);
   const pendingDeleteRef = useRef<PendingDelete | null>(null);
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const askRequestRef = useRef(0);
@@ -103,24 +101,12 @@ export default function App() {
     return () => window.removeEventListener("hashchange", applyHash);
   }, [loading]);
 
-  // Close the export menu on outside click
-  useEffect(() => {
-    if (!showExport) return;
-    const onDown = (e: MouseEvent) => {
-      if (!exportRef.current?.contains(e.target as Node)) setShowExport(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [showExport]);
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (showMindset) {
           setShowMindset(false);
-        } else if (showExport) {
-          setShowExport(false);
         } else if (showSettings) {
           setShowSettings(false);
         } else if (editingThoughtId) {
@@ -155,7 +141,42 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [query, expandedId, editingThoughtId, showSettings, showExport, selectionMode, showMindset]);
+  }, [query, expandedId, editingThoughtId, showSettings, selectionMode, showMindset]);
+
+  // Swipe from the left edge to go back (trackpad / touch).
+  useEffect(() => {
+    const edgeThreshold = 30;
+    const swipeThreshold = 80;
+    const verticalThreshold = 50;
+    let startX = 0;
+    let startY = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const dx = endX - startX;
+      const dy = endY - startY;
+      if (
+        startX <= edgeThreshold &&
+        dx > swipeThreshold &&
+        Math.abs(dy) < verticalThreshold
+      ) {
+        void closeCurrentTab();
+      }
+    };
+
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
 
   const handleSetLang = async (l: Lang) => {
     await setLang(l);
@@ -334,7 +355,6 @@ export default function App() {
   }, [tr]);
 
   const handleExport = useCallback((format: "md" | "json") => {
-    setShowExport(false);
     exportCards(format, cards);
   }, [cards, exportCards]);
 
@@ -422,16 +442,13 @@ export default function App() {
       <SearchHeader
         cardsCount={cards.length}
         query={query}
-        showExport={showExport}
         canExport={cards.length > 0}
         canSelect={cards.length > 0 && !selectionMode}
         canAnalyzeMindset={cards.length > 0}
-        exportRef={exportRef}
         searchRef={searchRef}
         onBack={handleBack}
         onQueryChange={setQuery}
         onClearQuery={() => { setQuery(""); searchRef.current?.focus(); }}
-        onToggleExport={() => setShowExport((v) => !v)}
         onExport={handleExport}
         onStartSelection={() => setSelectionMode(true)}
         onAnalyzeMindset={() => {
@@ -444,12 +461,12 @@ export default function App() {
         backLabel={tr("back")}
         cardCountLabel={tr("cardCount", { count: cards.length })}
         searchPlaceholder={tr("search")}
-        exportDataLabel={tr("exportData")}
         exportMarkdownLabel={tr("exportMarkdown")}
         exportJSONLabel={tr("exportJSON")}
         selectLabel={tr("select")}
         settingsLabel={tr("settingsTitle")}
         analyzeMindsetLabel={tr("analyzeMindset")}
+        moreLabel={tr("showMore")}
       />
 
       {selectionMode && (
