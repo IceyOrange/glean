@@ -1,5 +1,5 @@
 import { RefObject } from "react";
-import { ArrowLeft, Search, Download, Settings, X } from "lucide-react";
+import { ArrowLeft, Search, Download, Settings, X, Brain } from "lucide-react";
 
 interface SearchHeaderProps {
   cardsCount: number;
@@ -7,6 +7,7 @@ interface SearchHeaderProps {
   showExport: boolean;
   canExport: boolean;
   canSelect: boolean;
+  canAnalyzeMindset: boolean;
   exportRef: RefObject<HTMLDivElement | null>;
   searchRef: RefObject<HTMLInputElement | null>;
   onBack: () => void;
@@ -15,6 +16,7 @@ interface SearchHeaderProps {
   onToggleExport: () => void;
   onExport: (format: "md" | "json") => void;
   onStartSelection: () => void;
+  onAnalyzeMindset: () => void;
   onOpenSettings: () => void;
   title: string;
   backLabel: string;
@@ -25,6 +27,7 @@ interface SearchHeaderProps {
   exportJSONLabel: string;
   selectLabel: string;
   settingsLabel: string;
+  analyzeMindsetLabel: string;
 }
 
 export function SearchHeader({
@@ -33,6 +36,7 @@ export function SearchHeader({
   showExport,
   canExport,
   canSelect,
+  canAnalyzeMindset,
   exportRef,
   searchRef,
   onBack,
@@ -41,6 +45,7 @@ export function SearchHeader({
   onToggleExport,
   onExport,
   onStartSelection,
+  onAnalyzeMindset,
   onOpenSettings,
   title,
   backLabel,
@@ -51,6 +56,7 @@ export function SearchHeader({
   exportJSONLabel,
   selectLabel,
   settingsLabel,
+  analyzeMindsetLabel,
 }: SearchHeaderProps) {
   return (
     <header className="sticky top-0 bg-paper/90 backdrop-blur-sm border-b border-line-soft z-10">
@@ -131,6 +137,15 @@ export function SearchHeader({
               title={selectLabel}
             >
               {selectLabel}
+            </button>
+          )}
+          {canAnalyzeMindset && (
+            <button
+              onClick={onAnalyzeMindset}
+              className="p-1.5 text-ink-400 hover:text-seal hover:bg-surface rounded-lg transition-colors"
+              title={analyzeMindsetLabel}
+            >
+              <Brain size={16} />
             </button>
           )}
           <button

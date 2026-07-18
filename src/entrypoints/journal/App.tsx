@@ -4,11 +4,13 @@ import { getCards, deleteCard, deleteCards, restoreCard, updateCard } from "@/li
 import { dayGroup, type DayGroup } from "@/lib/utils";
 import {
   getAIConfig,
-  generateInsight,
-  getCachedInsight,
-  saveCachedInsight,
-  deleteCachedInsight,
-  Insight,
+  askAboutCard,
+  saveAskExchange,
+  getAskHistory,
+  deleteAskHistory,
+  analyzeMindset,
+  type AskExchange,
+  type MindsetAnalysis,
 } from "@/lib/ai";
 import { getLang, setLang, t, type Lang } from "@/lib/i18n";
 import { SearchHeader } from "@/components/journal/SearchHeader";
@@ -16,6 +18,7 @@ import { SelectionBar } from "@/components/journal/SelectionBar";
 import { CardItem } from "@/components/journal/CardItem";
 import { UndoToast, PendingDelete } from "@/components/journal/UndoToast";
 import { SettingsModal } from "@/components/journal/SettingsModal";
+import { MindsetModal } from "@/components/journal/MindsetModal";
 import { EmptyState } from "@/components/journal/EmptyState";
 import { Skeleton } from "@/components/journal/Skeleton";
 
@@ -30,10 +33,14 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingThoughtId, setEditingThoughtId] = useState<string | null>(null);
-  const [insightCardId, setInsightCardId] = useState<string | null>(null);
-  const [insight, setInsight] = useState<Insight | null>(null);
-  const [insightLoading, setInsightLoading] = useState(false);
-  const [insightError, setInsightError] = useState<string | null>(null);
+  const [askCardId, setAskCardId] = useState<string | null>(null);
+  const [askExchanges, setAskExchanges] = useState<AskExchange[]>([]);
+  const [askLoading, setAskLoading] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+  const [showMindset, setShowMindset] = useState(false);
+  const [mindsetResult, setMindsetResult] = useState<MindsetAnalysis | null>(null);
+  const [mindsetLoading, setMindsetLoading] = useState(false);
+  const [mindsetError, setMindsetError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [lang, setLangState] = useState<Lang>("zh");
@@ -45,7 +52,7 @@ export default function App() {
   const exportRef = useRef<HTMLDivElement>(null);
   const pendingDeleteRef = useRef<PendingDelete | null>(null);
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const insightRequestRef = useRef(0);
+  const askRequestRef = useRef(0);
 
   /** Close the current tab reliably, whether it was opened by the extension or not. */
   async function closeCurrentTab() {
@@ -110,7 +117,9 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (showExport) {
+        if (showMindset) {
+          setShowMindset(false);
+        } else if (showExport) {
           setShowExport(false);
         } else if (showSettings) {
           setShowSettings(false);
@@ -146,7 +155,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [query, expandedId, editingThoughtId, showSettings, showExport, selectionMode]);
+  }, [query, expandedId, editingThoughtId, showSettings, showExport, selectionMode, showMindset]);
 
   const handleSetLang = async (l: Lang) => {
     await setLang(l);
@@ -177,8 +186,13 @@ export default function App() {
     if (index === -1) return;
     const card = cards[index];
     if (expandedId === id) setExpandedId(null);
+    if (askCardId === id) {
+      setAskCardId(null);
+      setAskExchanges([]);
+      setAskError(null);
+    }
+    void deleteAskHistory(id);
     await deleteCard(id);
-    void deleteCachedInsight(id);
     const payload: PendingDelete = { type: "single", card, index };
     pendingDeleteRef.current = payload;
     setPendingDelete(payload);
@@ -209,10 +223,12 @@ export default function App() {
     setEditingThoughtId(null);
   };
 
-  const handleInsight = async (cardId: string, force = false) => {
-    if (insightCardId === cardId && !force) {
-      setInsightCardId(null);
-      setInsight(null);
+  const handleToggleAskCard = async (cardId: string) => {
+    if (askCardId === cardId) {
+      setAskCardId(null);
+      setAskExchanges([]);
+      setAskError(null);
+      setAskLoading(false);
       return;
     }
 
@@ -222,38 +238,62 @@ export default function App() {
       return;
     }
 
+    const history = await getAskHistory(cardId);
+    setAskCardId(cardId);
+    setAskExchanges(history);
+    setAskError(null);
+    setAskLoading(false);
+  };
+
+  const handleAsk = async (cardId: string, question: string) => {
+    const config = await getAIConfig();
+    if (!config) {
+      setShowSettings(true);
+      return;
+    }
+
     const card = cards.find((c) => c.id === cardId);
     if (!card) return;
 
-    setInsightCardId(cardId);
-    setInsightError(null);
+    setAskLoading(true);
+    setAskError(null);
 
-    if (!force) {
-      const cached = await getCachedInsight(card);
-      if (cached) {
-        setInsight(cached);
-        setInsightLoading(false);
-        return;
-      }
-    }
-
-    setInsightLoading(true);
-    setInsight(null);
-
-    const requestId = ++insightRequestRef.current;
+    const requestId = ++askRequestRef.current;
 
     try {
-      const result = await generateInsight(config, card, cards, lang);
-      if (insightRequestRef.current !== requestId) return;
-      setInsight(result);
-      void saveCachedInsight(card, result);
+      const answer = await askAboutCard(config, card, cards, question, lang);
+      if (askRequestRef.current !== requestId) return;
+      const exchange: AskExchange = { question, answer, createdAt: Date.now() };
+      setAskExchanges((prev) => [...prev, exchange]);
+      void saveAskExchange(cardId, exchange);
     } catch (err) {
-      if (insightRequestRef.current !== requestId) return;
-      setInsightError(err instanceof Error ? err.message : tr("genFail"));
+      if (askRequestRef.current !== requestId) return;
+      setAskError(err instanceof Error ? err.message : tr("genFail"));
     } finally {
-      if (insightRequestRef.current === requestId) {
-        setInsightLoading(false);
+      if (askRequestRef.current === requestId) {
+        setAskLoading(false);
       }
+    }
+  };
+
+  const handleAnalyzeMindset = async () => {
+    const config = await getAIConfig();
+    if (!config) {
+      setShowSettings(true);
+      return;
+    }
+
+    setMindsetLoading(true);
+    setMindsetError(null);
+    setMindsetResult(null);
+
+    try {
+      const result = await analyzeMindset(config, cards, lang);
+      setMindsetResult(result);
+    } catch (err) {
+      setMindsetError(err instanceof Error ? err.message : tr("genFail"));
+    } finally {
+      setMindsetLoading(false);
     }
   };
 
@@ -353,8 +393,13 @@ export default function App() {
       .filter((item): item is { card: Card; index: number } => item !== null);
 
     if (expandedId && selectedIds.has(expandedId)) setExpandedId(null);
+    if (askCardId && selectedIds.has(askCardId)) {
+      setAskCardId(null);
+      setAskExchanges([]);
+      setAskError(null);
+    }
+    void Promise.all(ids.map((id) => deleteAskHistory(id)));
     await deleteCards(ids);
-    void Promise.all(ids.map((id) => deleteCachedInsight(id)));
 
     const payload: PendingDelete = { type: "batch", items };
     pendingDeleteRef.current = payload;
@@ -380,6 +425,7 @@ export default function App() {
         showExport={showExport}
         canExport={cards.length > 0}
         canSelect={cards.length > 0 && !selectionMode}
+        canAnalyzeMindset={cards.length > 0}
         exportRef={exportRef}
         searchRef={searchRef}
         onBack={handleBack}
@@ -388,6 +434,11 @@ export default function App() {
         onToggleExport={() => setShowExport((v) => !v)}
         onExport={handleExport}
         onStartSelection={() => setSelectionMode(true)}
+        onAnalyzeMindset={() => {
+          setShowMindset(true);
+          setMindsetResult(null);
+          setMindsetError(null);
+        }}
         onOpenSettings={() => setShowSettings(true)}
         title={tr("title")}
         backLabel={tr("back")}
@@ -398,6 +449,7 @@ export default function App() {
         exportJSONLabel={tr("exportJSON")}
         selectLabel={tr("select")}
         settingsLabel={tr("settingsTitle")}
+        analyzeMindsetLabel={tr("analyzeMindset")}
       />
 
       {selectionMode && (
@@ -443,15 +495,16 @@ export default function App() {
                 expanded={expandedId === card.id}
                 selected={selectedIds.has(card.id)}
                 selectionMode={selectionMode}
-                insightOpen={insightCardId === card.id}
-                insight={insight}
-                insightLoading={insightLoading}
-                insightError={insightError}
+                askOpen={askCardId === card.id}
+                askExchanges={askCardId === card.id ? askExchanges : []}
+                askLoading={askCardId === card.id ? askLoading : false}
+                askError={askCardId === card.id ? askError : null}
                 editingThoughtId={editingThoughtId}
                 onToggleSelection={toggleSelection}
                 onExpand={handleExpand}
                 onDelete={handleDelete}
-                onInsight={handleInsight}
+                onToggleAsk={handleToggleAskCard}
+                onAsk={handleAsk}
                 onSaveThought={handleSaveThought}
                 onStartEditingThought={setEditingThoughtId}
                 onStopEditingThought={() => setEditingThoughtId(null)}
@@ -477,15 +530,16 @@ export default function App() {
                     expanded={expandedId === card.id}
                     selected={selectedIds.has(card.id)}
                     selectionMode={selectionMode}
-                    insightOpen={insightCardId === card.id}
-                    insight={insight}
-                    insightLoading={insightLoading}
-                    insightError={insightError}
+                    askOpen={askCardId === card.id}
+                    askExchanges={askCardId === card.id ? askExchanges : []}
+                    askLoading={askCardId === card.id ? askLoading : false}
+                    askError={askCardId === card.id ? askError : null}
                     editingThoughtId={editingThoughtId}
                     onToggleSelection={toggleSelection}
                     onExpand={handleExpand}
                     onDelete={handleDelete}
-                    onInsight={handleInsight}
+                    onToggleAsk={handleToggleAskCard}
+                    onAsk={handleAsk}
                     onSaveThought={handleSaveThought}
                     onStartEditingThought={setEditingThoughtId}
                     onStopEditingThought={() => setEditingThoughtId(null)}
@@ -508,6 +562,26 @@ export default function App() {
           onMouseLeave={scheduleToastDismiss}
         />
       )}
+
+      <MindsetModal
+        open={showMindset}
+        loading={mindsetLoading}
+        error={mindsetError}
+        analysis={mindsetResult}
+        title={tr("mindsetTitle")}
+        themesLabel={tr("mindsetThemes")}
+        patternsLabel={tr("mindsetPatterns")}
+        evolutionLabel={tr("mindsetEvolution")}
+        connectionsLabel={tr("mindsetConnections")}
+        loadingLabel={tr("mindsetLoading")}
+        retryLabel={tr("mindsetRetry")}
+        regenerateLabel={tr("mindsetRegenerate")}
+        closeLabel={tr("mindsetClose")}
+        emptyLabel={tr("mindsetEmpty")}
+        genFail={tr("genFail")}
+        onAnalyze={handleAnalyzeMindset}
+        onClose={() => setShowMindset(false)}
+      />
 
       {showSettings && (
         <SettingsModal

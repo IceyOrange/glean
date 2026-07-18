@@ -7,15 +7,24 @@ export interface AIConfig {
   model?: string;
 }
 
-export interface Insight {
-  reflection: string;
+export interface AskExchange {
+  question: string;
+  answer: string;
+  createdAt: number;
+}
+
+export interface MindsetAnalysis {
+  themes: string[];
+  patterns: string[];
+  evolution: string;
   connections: string[];
-  thinkingPattern: string;
-  suggestions: string[];
 }
 
 const CONFIG_KEY = "glean_ai_config";
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
+const ASK_HISTORY_KEY = "glean_ask_history";
+
+type AskHistoryCache = Record<string, AskExchange[]>;
 
 async function fetchWithRetry(
   url: string,
@@ -47,6 +56,79 @@ async function formatAIError(response: Response): Promise<string> {
   return `AI API error: ${response.status} ${text}`;
 }
 
+async function callAI(
+  config: AIConfig,
+  systemPrompt: string,
+  userPrompt: string,
+  jsonMode: boolean
+): Promise<string> {
+  const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  const isAnthropic = baseUrl.includes("anthropic.com");
+
+  if (isAnthropic) {
+    const response = await fetchWithRetry(baseUrl + "/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      signal: AbortSignal.timeout(30_000),
+      body: JSON.stringify({
+        model: config.model ?? "claude-3-5-sonnet-20241022",
+        max_tokens: jsonMode ? 1500 : 1200,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await formatAIError(response));
+    }
+
+    const data = await response.json();
+    const content = data.content?.[0]?.text;
+    if (!content) {
+      throw new Error("Empty AI response");
+    }
+    return content;
+  }
+
+  const body: Record<string, unknown> = {
+    model: config.model ?? "deepseek-chat",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: 0.7,
+    max_tokens: jsonMode ? 1500 : 1200,
+  };
+  if (jsonMode) {
+    body.response_format = { type: "json_object" };
+  }
+
+  const response = await fetchWithRetry(baseUrl + "/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + config.apiKey,
+    },
+    signal: AbortSignal.timeout(30_000),
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(await formatAIError(response));
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("Empty AI response");
+  }
+  return content;
+}
+
 export async function getAIConfig(): Promise<AIConfig | null> {
   try {
     const result = await chrome.storage.local.get(CONFIG_KEY);
@@ -64,161 +146,115 @@ export async function clearAIConfig(): Promise<void> {
   await chrome.storage.local.remove(CONFIG_KEY);
 }
 
-/* ── Insight cache ─────────────────────────── */
+/* ── Ask about a card ─────────────────────── */
 
-const INSIGHTS_KEY = "glean_insights";
-
-type InsightCache = Record<string, { signature: string; insight: Insight }>;
-
-/** Cheap content+thought hash so the cache invalidates when the card changes. */
-function signatureOf(card: Card): string {
-  const s = card.content + "|" + (card.thought ?? "");
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return String(h);
-}
-
-export async function getCachedInsight(card: Card): Promise<Insight | null> {
+export async function getAskHistory(cardId: string): Promise<AskExchange[]> {
   try {
-    const result = await chrome.storage.local.get(INSIGHTS_KEY);
-    const cache = (result[INSIGHTS_KEY] as InsightCache) ?? {};
-    const entry = cache[card.id];
-    return entry && entry.signature === signatureOf(card) ? entry.insight : null;
+    const result = await chrome.storage.local.get(ASK_HISTORY_KEY);
+    const cache = (result[ASK_HISTORY_KEY] as AskHistoryCache) ?? {};
+    return cache[cardId] ?? [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-export async function saveCachedInsight(card: Card, insight: Insight): Promise<void> {
+export async function saveAskExchange(cardId: string, exchange: AskExchange): Promise<void> {
   try {
-    const result = await chrome.storage.local.get(INSIGHTS_KEY);
-    const cache = (result[INSIGHTS_KEY] as InsightCache) ?? {};
-    cache[card.id] = { signature: signatureOf(card), insight };
-    await chrome.storage.local.set({ [INSIGHTS_KEY]: cache });
+    const result = await chrome.storage.local.get(ASK_HISTORY_KEY);
+    const cache = (result[ASK_HISTORY_KEY] as AskHistoryCache) ?? {};
+    cache[cardId] = [...(cache[cardId] ?? []), exchange].slice(-20);
+    await chrome.storage.local.set({ [ASK_HISTORY_KEY]: cache });
   } catch {
-    // Caching is best-effort; ignore storage failures.
+    // Best-effort caching.
   }
 }
 
-export async function deleteCachedInsight(cardId: string): Promise<void> {
+export async function deleteAskHistory(cardId: string): Promise<void> {
   try {
-    const result = await chrome.storage.local.get(INSIGHTS_KEY);
-    const cache = (result[INSIGHTS_KEY] as InsightCache) ?? {};
-    if (!(cardId in cache)) return;
+    const result = await chrome.storage.local.get(ASK_HISTORY_KEY);
+    const cache = (result[ASK_HISTORY_KEY] as AskHistoryCache) ?? {};
     delete cache[cardId];
-    await chrome.storage.local.set({ [INSIGHTS_KEY]: cache });
+    await chrome.storage.local.set({ [ASK_HISTORY_KEY]: cache });
   } catch {
     // Best-effort cleanup.
   }
 }
 
-export async function generateInsight(
+function formatCardForPrompt(c: Card, i: number): string {
+  let line = i + 1 + '. "' + c.content + '"';
+  if (c.thought) line += "\n   Thought: " + c.thought;
+  if (c.source?.heading) line += "\n   Source: " + c.source.heading;
+  return line;
+}
+
+export async function askAboutCard(
   config: AIConfig,
-  currentCard: Card,
+  card: Card,
   allCards: Card[],
+  question: string,
   lang: Lang = "zh"
-): Promise<Insight> {
-  const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
-
+): Promise<string> {
   const recentCards = allCards
-    .filter((c) => c.id !== currentCard.id)
+    .filter((c) => c.id !== card.id)
     .slice(0, 20);
-
-  const formatCard = (c: Card, i: number) => {
-    let line = i + 1 + '. "' + c.content + '"';
-    if (c.thought) line += "\n   " + t("aiThoughtLabel", lang) + ": " + c.thought;
-    if (c.source?.heading) line += "\n   " + t("aiSourceLabel", lang) + ": " + c.source.heading;
-    return line;
-  };
 
   const contextBlock =
     recentCards.length > 0
-      ? "\n\n" + t("aiContextHeader", lang, { count: recentCards.length }) + "\n"
-        + recentCards.map(formatCard).join("\n")
-      : "\n\n" + t("aiFirstRecord", lang);
+      ? "\n\n" + t("aiAskContextHeader", lang, { count: recentCards.length }) + "\n"
+        + recentCards.map(formatCardForPrompt).join("\n")
+      : "\n\n" + t("aiAskFirstRecord", lang);
 
   const systemPrompt =
-    t("aiRole", lang) + "\n\n" +
-    t("aiOutputLang", lang) + "\n" +
-    "{\n" +
-    '  "reflection": "' + t("aiReflectionDesc", lang) + '",\n' +
-    '  "connections": ["' + t("aiConnectionsDesc", lang) + '"],\n' +
-    '  "thinkingPattern": "' + t("aiPatternDesc", lang) + '",\n' +
-    '  "suggestions": ["' + t("aiSuggestionsDesc", lang) + '"]\n' +
-    "}\n\n" +
-    t("aiFirstNote", lang);
+    t("aiAskRole", lang) + "\n\n" +
+    t("aiAskOutputLang", lang);
 
-  let userPrompt = t("aiCurrentInspiration", lang) + ': "' + currentCard.content + '"';
-  if (currentCard.thought) {
-    userPrompt += "\n" + t("aiUserThought", lang) + ": " + currentCard.thought;
+  let userPrompt = t("aiAskCurrentInspiration", lang) + ': "' + card.content + '"';
+  if (card.thought) {
+    userPrompt += "\n" + t("aiAskUserThought", lang) + ": " + card.thought;
   }
-  if (currentCard.source?.heading) {
-    userPrompt += "\n" + t("aiSource", lang) + ": " + currentCard.source.heading;
+  if (card.source?.heading) {
+    userPrompt += "\n" + t("aiAskSource", lang) + ": " + card.source.heading;
   }
   userPrompt += contextBlock;
+  userPrompt += "\n\n" + t("aiAskQuestionLabel", lang) + ": " + question;
 
-  const isAnthropic = baseUrl.includes("anthropic.com");
-  let content: string;
+  return await callAI(config, systemPrompt, userPrompt, false);
+}
 
-  if (isAnthropic) {
-    const response = await fetchWithRetry(baseUrl + "/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": config.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      signal: AbortSignal.timeout(30_000),
-      body: JSON.stringify({
-        model: config.model ?? "claude-3-5-sonnet-20241022",
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
+/* ── Analyze mindset across cards ─────────── */
 
-    if (!response.ok) {
-      throw new Error(await formatAIError(response));
-    }
-
-    const data = await response.json();
-    content = data.content?.[0]?.text;
-    if (!content) {
-      throw new Error("Empty AI response");
-    }
-  } else {
-    const response = await fetchWithRetry(baseUrl + "/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + config.apiKey,
-      },
-      signal: AbortSignal.timeout(30_000),
-      body: JSON.stringify({
-        model: config.model ?? "deepseek-chat",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
-        response_format: { type: "json_object" },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(await formatAIError(response));
-    }
-
-    const data = await response.json();
-    content = data.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("Empty AI response");
-    }
+export async function analyzeMindset(
+  config: AIConfig,
+  cards: Card[],
+  lang: Lang = "zh"
+): Promise<MindsetAnalysis> {
+  if (cards.length === 0) {
+    throw new Error(t("mindsetEmpty", lang));
   }
 
+  const systemPrompt =
+    t("aiMindsetRole", lang) + "\n\n" +
+    t("aiMindsetOutputLang", lang) + "\n" +
+    "{\n" +
+    '  "themes": ["' + t("aiMindsetThemesDesc", lang) + '"],\n' +
+    '  "patterns": ["' + t("aiMindsetPatternsDesc", lang) + '"],\n' +
+    '  "evolution": "' + t("aiMindsetEvolutionDesc", lang) + '",\n' +
+    '  "connections": ["' + t("aiMindsetConnectionsDesc", lang) + '"]\n' +
+    "}\n";
+
+  const records = cards
+    .slice(0, 50)
+    .map(formatCardForPrompt)
+    .join("\n\n");
+
+  const userPrompt =
+    t("aiMindsetRecordsHeader", lang, { count: cards.length }) + "\n\n" +
+    records;
+
+  const content = await callAI(config, systemPrompt, userPrompt, true);
+
   try {
-    return JSON.parse(content) as Insight;
+    return JSON.parse(content) as MindsetAnalysis;
   } catch {
     throw new Error("Invalid AI response format");
   }

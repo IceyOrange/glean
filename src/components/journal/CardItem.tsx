@@ -1,11 +1,11 @@
 import { memo, useRef } from "react";
 import type { Card } from "@/lib/types";
-import { Insight } from "@/lib/ai";
+import type { AskExchange } from "@/lib/ai";
 import { t, type Lang } from "@/lib/i18n";
 import { highlight, siteColor } from "@/lib/ui";
 import { formatRelativeDate, formatPublishedDate } from "@/lib/utils";
-import { PenLine, Pencil, Sparkles, Trash2, ArrowUpRight, Check, Square } from "lucide-react";
-import { InsightPanel } from "./InsightPanel";
+import { PenLine, Pencil, MessageCircleQuestion, Trash2, ArrowUpRight, Check, Square } from "lucide-react";
+import { AskPanel } from "./AskPanel";
 
 interface CardItemProps {
   card: Card;
@@ -14,15 +14,16 @@ interface CardItemProps {
   expanded: boolean;
   selected: boolean;
   selectionMode: boolean;
-  insightOpen: boolean;
-  insight: Insight | null;
-  insightLoading: boolean;
-  insightError: string | null;
+  askOpen: boolean;
+  askExchanges: AskExchange[];
+  askLoading: boolean;
+  askError: string | null;
   editingThoughtId: string | null;
   onToggleSelection: (id: string) => void;
   onExpand: (id: string) => void;
   onDelete: (id: string) => void;
-  onInsight: (id: string, force?: boolean) => void;
+  onToggleAsk: (id: string) => void;
+  onAsk: (id: string, question: string) => void;
   onSaveThought: (id: string, thought: string) => void;
   onStartEditingThought: (id: string) => void;
   onStopEditingThought: () => void;
@@ -35,15 +36,16 @@ export const CardItem = memo(function CardItem({
   expanded,
   selected,
   selectionMode,
-  insightOpen,
-  insight,
-  insightLoading,
-  insightError,
+  askOpen,
+  askExchanges,
+  askLoading,
+  askError,
   editingThoughtId,
   onToggleSelection,
   onExpand,
   onDelete,
-  onInsight,
+  onToggleAsk,
+  onAsk,
   onSaveThought,
   onStartEditingThought,
   onStopEditingThought,
@@ -249,14 +251,14 @@ export const CardItem = memo(function CardItem({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onInsight(card.id);
+                  onToggleAsk(card.id);
                 }}
                 className={`opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all p-1 rounded ${
-                  insightOpen ? "text-seal opacity-100" : "text-ink-300 hover:text-seal"
+                  askOpen ? "text-seal opacity-100" : "text-ink-300 hover:text-seal"
                 }`}
-                title={tr("aiTooltip")}
+                title={tr("askAboutThis")}
               >
-                <Sparkles size={13} />
+                <MessageCircleQuestion size={13} />
               </button>
               <button
                 onClick={(e) => {
@@ -271,23 +273,22 @@ export const CardItem = memo(function CardItem({
             </div>
           </div>
 
-          {/* Insight panel */}
-          {insightOpen && (
-            <InsightPanel
-              insight={insight}
-              loading={insightLoading}
-              error={insightError}
-              reflectLabel={tr("insightReflect")}
-              connectLabel={tr("insightConnect")}
-              patternLabel={tr("insightPattern")}
-              suggestLabel={tr("insightSuggest")}
-              loadingLabel={tr("insightLoading")}
-              retryLabel={tr("insightRetry")}
-              refreshLabel={tr("insightRefresh")}
-              collapseLabel={tr("insightCollapse")}
-              genFail={tr("genFail")}
-              onRefresh={() => onInsight(card.id, true)}
-              onCollapse={() => onInsight(card.id)}
+          {/* Ask panel */}
+          {askOpen && (
+            <AskPanel
+              exchanges={askExchanges}
+              loading={askLoading}
+              error={askError}
+              title={tr("askAboutThis")}
+              placeholder={tr("askPlaceholder")}
+              submitLabel={tr("askSubmit")}
+              collapseLabel={tr("askCollapse")}
+              loadingLabel={tr("askLoading")}
+              retryLabel={tr("askRetry")}
+              emptyHint={tr("askEmptyHint")}
+              errorHint={tr("askErrorHint")}
+              onAsk={(question) => onAsk(card.id, question)}
+              onCollapse={() => onToggleAsk(card.id)}
             />
           )}
         </div>
