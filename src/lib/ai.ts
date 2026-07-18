@@ -127,35 +127,66 @@ export async function generateInsight(
   }
   userPrompt += contextBlock;
 
-  const response = await fetch(baseUrl + "/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + config.apiKey,
-    },
-    signal: AbortSignal.timeout(30_000),
-    body: JSON.stringify({
-      model: config.model ?? "deepseek-chat",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 1000,
-      response_format: { type: "json_object" },
-    }),
-  });
+  const isAnthropic = baseUrl.includes("anthropic.com");
+  let content: string;
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error("AI API error: " + response.status + " " + error);
-  }
+  if (isAnthropic) {
+    const response = await fetch(baseUrl + "/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      signal: AbortSignal.timeout(30_000),
+      body: JSON.stringify({
+        model: config.model ?? "claude-3-5-sonnet-20241022",
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
 
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error("AI API error: " + response.status + " " + error);
+    }
 
-  if (!content) {
-    throw new Error("Empty AI response");
+    const data = await response.json();
+    content = data.content?.[0]?.text;
+    if (!content) {
+      throw new Error("Empty AI response");
+    }
+  } else {
+    const response = await fetch(baseUrl + "/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + config.apiKey,
+      },
+      signal: AbortSignal.timeout(30_000),
+      body: JSON.stringify({
+        model: config.model ?? "deepseek-chat",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error("AI API error: " + response.status + " " + error);
+    }
+
+    const data = await response.json();
+    content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("Empty AI response");
+    }
   }
 
   try {

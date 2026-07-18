@@ -16,6 +16,20 @@ const THEMES: { value: Theme; icon: typeof Monitor; labelKey: string }[] = [
   { value: "dark", icon: Moon, labelKey: "themeDark" },
 ];
 
+interface AIPreset {
+  key: string;
+  labelKey: string;
+  baseUrl: string;
+  model: string;
+}
+
+const AI_PRESETS: AIPreset[] = [
+  { key: "deepseek", labelKey: "aiProviderDeepseek", baseUrl: "https://api.deepseek.com", model: "deepseek-chat" },
+  { key: "siliconflow", labelKey: "aiProviderSiliconflow", baseUrl: "https://api.siliconflow.cn", model: "deepseek-ai/DeepSeek-V3" },
+  { key: "openai", labelKey: "aiProviderOpenai", baseUrl: "https://api.openai.com", model: "gpt-4o-mini" },
+  { key: "anthropic", labelKey: "aiProviderAnthropic", baseUrl: "https://api.anthropic.com", model: "claude-3-5-sonnet-20241022" },
+];
+
 
 
 export function LanguageControl({
@@ -130,9 +144,18 @@ export function AIConfigForm({
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch(`${aiConfig.baseUrl || "https://api.deepseek.com"}/v1/models`, {
-        headers: { Authorization: `Bearer ${aiConfig.apiKey}` },
-      });
+      const baseUrl = aiConfig.baseUrl || "https://api.deepseek.com";
+      const isAnthropic = baseUrl.includes("anthropic.com");
+      const res = isAnthropic
+        ? await fetch(`${baseUrl}/v1/models`, {
+            headers: {
+              "x-api-key": aiConfig.apiKey,
+              "anthropic-version": "2023-06-01",
+            },
+          })
+        : await fetch(`${baseUrl}/v1/models`, {
+            headers: { Authorization: `Bearer ${aiConfig.apiKey}` },
+          });
       setTestResult(res.ok ? "ok" : "fail");
     } catch {
       setTestResult("fail");
@@ -188,6 +211,22 @@ export function AIConfigForm({
         {maskedKey && !showApiKey && (
           <p className="text-[10px] text-ink-300 mt-1 pl-0.5 tabular-nums">{maskedKey}</p>
         )}
+      </div>
+
+      {/* Provider presets */}
+      <div className="flex flex-wrap gap-1.5">
+        {AI_PRESETS.map((preset) => (
+          <button
+            key={preset.key}
+            onClick={() => {
+              setBaseUrlInput(preset.baseUrl);
+              setModelInput(preset.model);
+            }}
+            className="px-2.5 py-1 text-[11px] rounded-full border border-line text-ink-600 hover:border-ink-400 hover:text-ink-900 transition-colors"
+          >
+            {tr(preset.labelKey)}
+          </button>
+        ))}
       </div>
 
       {/* API URL */}

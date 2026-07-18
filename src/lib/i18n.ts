@@ -18,6 +18,10 @@ const translations: Record<Lang, Record<string, string>> = {
     emptyTitle2: "捕获你的第一条灵感",
     settings: "设置",
     aiProvider: "AI 服务",
+    aiProviderDeepseek: "DeepSeek",
+    aiProviderSiliconflow: "硅基流动",
+    aiProviderOpenai: "ChatGPT",
+    aiProviderAnthropic: "Anthropic",
     cloudSync: "云同步",
     comingSoon: "即将推出…",
     // History
@@ -147,6 +151,10 @@ const translations: Record<Lang, Record<string, string>> = {
     emptyTitle2: "to capture your first card",
     settings: "Settings",
     aiProvider: "AI Provider",
+    aiProviderDeepseek: "DeepSeek",
+    aiProviderSiliconflow: "SiliconFlow",
+    aiProviderOpenai: "ChatGPT",
+    aiProviderAnthropic: "Anthropic",
     cloudSync: "Cloud Sync",
     comingSoon: "Coming soon…",
     // History
@@ -276,6 +284,10 @@ const translations: Record<Lang, Record<string, string>> = {
     emptyTitle2: "pour capturer votre première carte",
     settings: "Paramètres",
     aiProvider: "Fournisseur IA",
+    aiProviderDeepseek: "DeepSeek",
+    aiProviderSiliconflow: "SiliconFlow",
+    aiProviderOpenai: "ChatGPT",
+    aiProviderAnthropic: "Anthropic",
     cloudSync: "Synchronisation cloud",
     comingSoon: "Bientôt disponible…",
     // History
