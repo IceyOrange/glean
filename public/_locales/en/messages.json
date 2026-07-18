@@ -4,7 +4,7 @@
     "description": "Extension name"
   },
   "appDesc": {
-    "message": "Capture quotes and your thoughts — one card at a time.",
+    "message": "Glean the lines that strike you while reading — save each quote with your thought, one card at a time.",
     "description": "Extension description shown in the store and browser UI"
   }
 }
