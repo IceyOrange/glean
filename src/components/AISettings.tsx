@@ -214,19 +214,23 @@ export function AIConfigForm({
       </div>
 
       {/* Provider presets */}
-      <div className="flex flex-wrap gap-1.5">
-        {AI_PRESETS.map((preset) => (
-          <button
-            key={preset.key}
-            onClick={() => {
-              setBaseUrlInput(preset.baseUrl);
-              setModelInput(preset.model);
-            }}
-            className="px-2.5 py-1 text-[11px] rounded-full border border-line text-ink-600 hover:border-ink-400 hover:text-ink-900 transition-colors"
-          >
-            {tr(preset.labelKey)}
-          </button>
-        ))}
+      <div>
+        <label className="block text-xs text-ink-600 mb-1">{tr("aiPresetLabel")}</label>
+        <div className="flex gap-1 bg-line-soft rounded-lg p-1">
+          {AI_PRESETS.map((preset) => (
+            <button
+              key={preset.key}
+              onClick={() => {
+                setBaseUrlInput(preset.baseUrl);
+                setModelInput(preset.model);
+              }}
+              title={tr(preset.labelKey)}
+              className="flex-1 min-w-0 px-1 py-1.5 text-[10px] leading-none rounded-md text-ink-600 hover:text-ink-900 hover:bg-surface transition-colors truncate"
+            >
+              {tr(preset.labelKey)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* API URL */}

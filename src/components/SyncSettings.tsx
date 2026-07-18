@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Cloud, Check, AlertCircle, Loader2 } from "lucide-react";
+import { Cloud, Check, AlertCircle, Loader2, ChevronDown } from "lucide-react";
 import {
   SyncProvider,
   SavedSyncConfig,
@@ -101,20 +101,19 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
           <Cloud size={14} />
           <span className="text-xs font-medium">{tr("syncProvider")}</span>
         </div>
-        <div className="flex gap-1 bg-line-soft rounded-lg p-1">
-          {PROVIDERS.map((p) => (
-            <button
-              key={p}
-              onClick={() => handleProviderChange(p)}
-              className={`px-2.5 py-1 text-xs rounded-md transition-all ${
-                provider === p
-                  ? "bg-ink-900 text-paper shadow-sm"
-                  : "text-ink-600 hover:text-ink-900"
-              }`}
-            >
-              {tr(getProviderMeta(p).labelKey)}
-            </button>
-          ))}
+        <div className="relative w-44">
+          <select
+            value={provider}
+            onChange={(e) => handleProviderChange(e.target.value as SyncProvider)}
+            className={`${inputCls} appearance-none pr-8 py-1.5 text-xs`}
+          >
+            {PROVIDERS.map((p) => (
+              <option key={p} value={p}>
+                {tr(getProviderMeta(p).labelKey)}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
         </div>
       </div>
 
