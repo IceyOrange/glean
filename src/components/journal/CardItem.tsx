@@ -1,4 +1,4 @@
-import { memo, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { Card } from "@/lib/types";
 import type { AskExchange } from "@/lib/ai";
 import { t, type Lang } from "@/lib/i18n";
@@ -51,8 +51,23 @@ export const CardItem = memo(function CardItem({
   onStopEditingThought,
 }: CardItemProps) {
   const shiftRef = useRef(false);
+  const quoteRef = useRef<HTMLParagraphElement>(null);
+  const thoughtPreviewRef = useRef<HTMLParagraphElement>(null);
+  const [isClamped, setIsClamped] = useState(false);
   const site = card.source.siteName || card.source.heading || card.source.url;
   const tr = (key: string, vars?: Record<string, string | number>) => t(key, lang, vars);
+
+  // Only make the card clickable when the quote or thought preview is actually
+  // clamped, or when it's already expanded (so it can be collapsed).
+  useEffect(() => {
+    const quoteEl = quoteRef.current;
+    const thoughtEl = thoughtPreviewRef.current;
+    const quoteClamped = !expanded && !!quoteEl && quoteEl.scrollHeight > quoteEl.clientHeight;
+    const thoughtClamped = !expanded && !!thoughtEl && thoughtEl.scrollHeight > thoughtEl.clientHeight;
+    setIsClamped(quoteClamped || thoughtClamped);
+  }, [expanded, card.content, card.thought, query]);
+
+  const clickable = !selectionMode && (expanded || isClamped);
 
   return (
     <article
@@ -80,17 +95,20 @@ export const CardItem = memo(function CardItem({
         <div className="flex-1 min-w-0">
           {/* Quote */}
           <div
-            className={selectionMode ? "" : "cursor-pointer"}
+            className={clickable ? "cursor-pointer" : ""}
             onClick={
-              selectionMode
-                ? undefined
-                : () => {
+              clickable
+                ? () => {
                     onExpand(card.id);
                     onStopEditingThought();
                   }
+                : undefined
             }
           >
-            <p className={`font-quote text-[15px] text-ink-900 leading-[1.8] ${expanded ? "" : "line-clamp-3"}`}>
+            <p
+              ref={quoteRef}
+              className={`font-quote text-[15px] text-ink-900 leading-[1.8] ${expanded ? "" : "line-clamp-3"}`}
+            >
               <span className="text-seal mr-1">“</span>
               {highlight(card.content, query)}
               <span className="text-ink-300 ml-1">”</span>
@@ -101,7 +119,10 @@ export const CardItem = memo(function CardItem({
           {!expanded && card.thought && (
             <div className="mt-2 flex items-start gap-1.5">
               <PenLine size={11} className="text-ink-300 mt-[3px] shrink-0" />
-              <p className="font-quote italic text-[13px] text-ink-600 leading-relaxed line-clamp-1">
+              <p
+                ref={thoughtPreviewRef}
+                className="font-quote italic text-[13px] text-ink-600 leading-relaxed line-clamp-1"
+              >
                 {highlight(card.thought, query)}
               </p>
             </div>
