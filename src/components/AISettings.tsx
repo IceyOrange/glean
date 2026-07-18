@@ -148,21 +148,22 @@ export function AIConfigForm({
   };
 
   const handleTest = async () => {
-    if (!aiConfig) return;
+    const key = apiKeyInput.trim();
+    if (!key) return;
     setTesting(true);
     setTestResult(null);
     try {
-      const baseUrl = aiConfig.baseUrl || "https://api.deepseek.com";
+      const baseUrl = baseUrlInput.trim() || "https://api.deepseek.com";
       const isAnthropic = baseUrl.includes("anthropic.com");
       const res = isAnthropic
         ? await fetch(`${baseUrl}/v1/models`, {
             headers: {
-              "x-api-key": aiConfig.apiKey,
+              "x-api-key": key,
               "anthropic-version": "2023-06-01",
             },
           })
         : await fetch(`${baseUrl}/v1/models`, {
-            headers: { Authorization: `Bearer ${aiConfig.apiKey}` },
+            headers: { Authorization: `Bearer ${key}` },
           });
       setTestResult(res.ok ? "ok" : "fail");
     } catch {
@@ -205,7 +206,10 @@ export function AIConfigForm({
           <input
             type={showApiKey ? "text" : "password"}
             value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
+            onChange={(e) => {
+              setApiKeyInput(e.target.value);
+              setTestResult(null);
+            }}
             placeholder="sk-..."
             className={`${inputCls} pr-10`}
           />
@@ -253,7 +257,10 @@ export function AIConfigForm({
         <input
           type="url"
           value={baseUrlInput}
-          onChange={(e) => setBaseUrlInput(e.target.value)}
+          onChange={(e) => {
+            setBaseUrlInput(e.target.value);
+            setTestResult(null);
+          }}
           placeholder="https://api.deepseek.com"
           className={inputCls}
         />
@@ -265,7 +272,10 @@ export function AIConfigForm({
         <input
           type="text"
           value={modelInput}
-          onChange={(e) => setModelInput(e.target.value)}
+          onChange={(e) => {
+            setModelInput(e.target.value);
+            setTestResult(null);
+          }}
           placeholder="deepseek-chat"
           className={inputCls}
         />
@@ -280,7 +290,7 @@ export function AIConfigForm({
         >
           {configSaved ? <><Check size={12} /> {tr("saved")}</> : tr("save")}
         </button>
-        {aiConfig && (
+        {apiKeyInput.trim() && (
           <button
             onClick={handleTest}
             disabled={testing}
@@ -293,6 +303,15 @@ export function AIConfigForm({
           </button>
         )}
       </div>
+      {testResult && (
+        <p
+          className={`text-[11px] ${
+            testResult === "ok" ? "text-sage" : "text-seal"
+          }`}
+        >
+          {testResult === "ok" ? tr("testConnectionOk") : tr("testConnectionFail")}
+        </p>
+      )}
     </div>
   );
 

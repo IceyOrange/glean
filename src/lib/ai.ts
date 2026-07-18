@@ -17,6 +17,36 @@ export interface Insight {
 const CONFIG_KEY = "glean_ai_config";
 const DEFAULT_BASE_URL = "https://api.deepseek.com";
 
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 1,
+  delayMs = 2000
+): Promise<Response> {
+  let attempt = 0;
+  while (true) {
+    const res = await fetch(url, options);
+    if (res.status === 429 && attempt < retries) {
+      attempt++;
+      await new Promise((r) => setTimeout(r, delayMs));
+      continue;
+    }
+    return res;
+  }
+}
+
+async function formatAIError(response: Response): Promise<string> {
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    if (data.message) return `AI API error: ${response.status} ${data.message}`;
+    if (data.error?.message) return `AI API error: ${response.status} ${data.error.message}`;
+  } catch {
+    // fall through
+  }
+  return `AI API error: ${response.status} ${text}`;
+}
+
 export async function getAIConfig(): Promise<AIConfig | null> {
   try {
     const result = await chrome.storage.local.get(CONFIG_KEY);
@@ -131,7 +161,7 @@ export async function generateInsight(
   let content: string;
 
   if (isAnthropic) {
-    const response = await fetch(baseUrl + "/v1/messages", {
+    const response = await fetchWithRetry(baseUrl + "/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -148,8 +178,7 @@ export async function generateInsight(
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error("AI API error: " + response.status + " " + error);
+      throw new Error(await formatAIError(response));
     }
 
     const data = await response.json();
@@ -158,7 +187,7 @@ export async function generateInsight(
       throw new Error("Empty AI response");
     }
   } else {
-    const response = await fetch(baseUrl + "/v1/chat/completions", {
+    const response = await fetchWithRetry(baseUrl + "/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -178,8 +207,7 @@ export async function generateInsight(
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error("AI API error: " + response.status + " " + error);
+      throw new Error(await formatAIError(response));
     }
 
     const data = await response.json();
