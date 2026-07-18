@@ -1,6 +1,6 @@
 import { Card } from "@/lib/types";
 
-export type SyncProvider = "notion" | "nutstore";
+export type SyncProvider = "notion" | "nutstore" | "webdav" | "koofr" | "pcloud" | "infini";
 
 export interface SyncResult {
   ok: boolean;
@@ -14,14 +14,14 @@ export interface NotionConfig {
   databaseId?: string;
 }
 
-export interface NutstoreConfig {
+export interface WebDAVConfig {
   serverUrl: string;
   username: string;
   password: string;
   remotePath: string;
 }
 
-export type ProviderConfig = NotionConfig | NutstoreConfig;
+export type ProviderConfig = NotionConfig | WebDAVConfig;
 
 export interface SavedSyncConfig {
   provider: SyncProvider;

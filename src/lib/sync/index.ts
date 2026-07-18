@@ -7,7 +7,7 @@ export * from "./types";
 export * from "./storage";
 export * from "./registry";
 export { notionAdapter } from "./notion";
-export { nutstoreAdapter } from "./nutstore";
+export { webdavAdapter } from "./webdav";
 
 export async function syncCards(cards: Card[]): Promise<SyncResult> {
   const saved = await getSyncConfig();

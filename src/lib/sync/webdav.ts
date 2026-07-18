@@ -1,5 +1,5 @@
 import { Card } from "@/lib/types";
-import { SyncAdapter, SyncResult, NutstoreConfig } from "./types";
+import { SyncAdapter, SyncResult, WebDAVConfig } from "./types";
 
 function normalizeUrl(serverUrl: string, remotePath: string, filename: string): string {
   const base = serverUrl.replace(/\/$/, "");
@@ -15,7 +15,7 @@ function basicAuth(username: string, password: string): string {
 async function davRequest(
   url: string,
   method: string,
-  config: NutstoreConfig,
+  config: WebDAVConfig,
   body?: BodyInit,
   extraHeaders: Record<string, string> = {}
 ): Promise<Response> {
@@ -30,7 +30,7 @@ async function davRequest(
   return res;
 }
 
-async function ensureDirectory(url: string, config: NutstoreConfig): Promise<void> {
+async function ensureDirectory(url: string, config: WebDAVConfig): Promise<void> {
   const res = await davRequest(url, "PROPFIND", config, undefined, {
     Depth: "0",
   });
@@ -54,7 +54,7 @@ const BACKUP_FILE_RE = /glean-backup-(\d{4}-\d{2}-\d{2})\.json/;
 const BACKUP_RETENTION_COUNT = 30;
 
 /** List dated backup files and delete anything older than the retention count. */
-async function cleanupOldBackups(dirUrl: string, config: NutstoreConfig): Promise<void> {
+async function cleanupOldBackups(dirUrl: string, config: WebDAVConfig): Promise<void> {
   try {
     const res = await davRequest(dirUrl, "PROPFIND", config, undefined, {
       Depth: "1",
@@ -88,8 +88,8 @@ async function cleanupOldBackups(dirUrl: string, config: NutstoreConfig): Promis
   }
 }
 
-export const nutstoreAdapter: SyncAdapter<NutstoreConfig> = {
-  name: "Nutstore",
+export const webdavAdapter: SyncAdapter<WebDAVConfig> = {
+  name: "WebDAV",
 
   validate(config) {
     if (!config.serverUrl.trim()) return "Server URL is required";

@@ -4,6 +4,7 @@ import {
   SyncProvider,
   SavedSyncConfig,
   ProviderConfig,
+  WebDAVConfig,
   SyncResult,
   getSyncConfig,
   saveSyncConfig,
@@ -11,6 +12,7 @@ import {
   getProviderMeta,
   getAdapter,
   syncCards,
+  isWebDAVProvider,
 } from "@/lib/sync";
 import { getCards } from "@/lib/storage";
 
@@ -18,7 +20,7 @@ interface SyncSettingsProps {
   tr: (key: string, vars?: Record<string, string | number>) => string;
 }
 
-const PROVIDERS: SyncProvider[] = ["notion", "nutstore"];
+const PROVIDERS: SyncProvider[] = ["notion", "nutstore", "webdav", "koofr", "pcloud", "infini"];
 
 function formatTime(timestamp: number | undefined, tr: SyncSettingsProps["tr"]) {
   if (!timestamp) return tr("syncNever");
@@ -110,7 +112,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
                   : "text-ink-600 hover:text-ink-900"
               }`}
             >
-              {tr(p === "notion" ? "syncNotion" : "syncNutstore")}
+              {tr(getProviderMeta(p).labelKey)}
             </button>
           ))}
         </div>
@@ -147,13 +149,13 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
         </div>
       )}
 
-      {provider === "nutstore" && (
+      {isWebDAVProvider(provider) && (
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-ink-600 mb-1">{tr("syncServerUrl")}</label>
             <input
               type="url"
-              value={(providerConfig as { serverUrl: string }).serverUrl}
+              value={(providerConfig as WebDAVConfig).serverUrl}
               onChange={(e) => updateProviderConfig({ serverUrl: e.target.value })}
               className={inputCls}
             />
@@ -162,7 +164,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             <label className="block text-xs text-ink-600 mb-1">{tr("syncUsername")}</label>
             <input
               type="text"
-              value={(providerConfig as { username: string }).username}
+              value={(providerConfig as WebDAVConfig).username}
               onChange={(e) => updateProviderConfig({ username: e.target.value })}
               className={inputCls}
             />
@@ -171,7 +173,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             <label className="block text-xs text-ink-600 mb-1">{tr("syncPassword")}</label>
             <input
               type="password"
-              value={(providerConfig as { password: string }).password}
+              value={(providerConfig as WebDAVConfig).password}
               onChange={(e) => updateProviderConfig({ password: e.target.value })}
               className={inputCls}
             />
@@ -180,7 +182,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             <label className="block text-xs text-ink-600 mb-1">{tr("syncRemotePath")}</label>
             <input
               type="text"
-              value={(providerConfig as { remotePath: string }).remotePath}
+              value={(providerConfig as WebDAVConfig).remotePath}
               onChange={(e) => updateProviderConfig({ remotePath: e.target.value })}
               className={inputCls}
             />

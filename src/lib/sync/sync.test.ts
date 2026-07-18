@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { notionAdapter } from "./notion";
-import { nutstoreAdapter } from "./nutstore";
+import { webdavAdapter } from "./webdav";
 import { Card } from "@/lib/types";
 
 const sampleCards: Card[] = [
@@ -34,37 +34,37 @@ describe("notionAdapter", () => {
   });
 });
 
-describe("nutstoreAdapter", () => {
+describe("webdavAdapter", () => {
   it("validates required fields", () => {
-    expect(nutstoreAdapter.validate({
+    expect(webdavAdapter.validate({
       serverUrl: "",
       username: "user",
       password: "pass",
       remotePath: "/Glean/",
     })).toBe("Server URL is required");
 
-    expect(nutstoreAdapter.validate({
+    expect(webdavAdapter.validate({
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "",
       password: "pass",
       remotePath: "/Glean/",
     })).toBe("Username is required");
 
-    expect(nutstoreAdapter.validate({
+    expect(webdavAdapter.validate({
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "user",
       password: "",
       remotePath: "/Glean/",
     })).toBe("Password is required");
 
-    expect(nutstoreAdapter.validate({
+    expect(webdavAdapter.validate({
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "user",
       password: "pass",
       remotePath: "",
     })).toBe("Remote path is required");
 
-    expect(nutstoreAdapter.validate({
+    expect(webdavAdapter.validate({
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "user",
       password: "pass",
@@ -73,7 +73,7 @@ describe("nutstoreAdapter", () => {
   });
 });
 
-describe("nutstoreAdapter.sync", () => {
+describe("webdavAdapter.sync", () => {
   beforeEach(() => {
     global.fetch = vi.fn();
   });
@@ -89,7 +89,7 @@ describe("nutstoreAdapter.sync", () => {
       text: async () => "",
     } as Response);
 
-    const result = await nutstoreAdapter.sync(sampleCards, {
+    const result = await webdavAdapter.sync(sampleCards, {
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "tester",
       password: "app-password",
@@ -123,7 +123,7 @@ describe("nutstoreAdapter.sync", () => {
       .mockResolvedValueOnce({ ok: true, status: 201, text: async () => "" } as Response)
       .mockResolvedValue({ ok: true, status: 200, text: async () => "" } as Response);
 
-    const result = await nutstoreAdapter.sync(sampleCards, {
+    const result = await webdavAdapter.sync(sampleCards, {
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "tester",
       password: "app-password",
