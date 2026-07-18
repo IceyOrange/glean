@@ -42,8 +42,8 @@ const translations: Record<Lang, Record<string, string>> = {
     insightCollapse: "收起",
     genFail: "生成失败",
     // Settings
-    settingsTitle: "配置 AI 洞察功能",
-    settingsDesc: "配置 DeepSeek API Key 后，AI 可以分析你的灵感，发现思维模式和深层联系。",
+    settingsTitle: "设置",
+    settingsDesc: "自定义语言、主题和 AI 洞察选项。",
     apiKey: "API Key",
     apiUrl: "API 地址（可选）",
     modelLabel: "模型",
@@ -171,8 +171,8 @@ const translations: Record<Lang, Record<string, string>> = {
     insightCollapse: "Collapse",
     genFail: "Generation failed",
     // Settings
-    settingsTitle: "Configure AI Insight",
-    settingsDesc: "After configuring the DeepSeek API Key, AI can analyze your inspirations, discover thinking patterns and deeper connections.",
+    settingsTitle: "Settings",
+    settingsDesc: "Customize language, theme, and AI insight options.",
     apiKey: "API Key",
     apiUrl: "API URL (optional)",
     modelLabel: "Model",
@@ -300,8 +300,8 @@ const translations: Record<Lang, Record<string, string>> = {
     insightCollapse: "Réduire",
     genFail: "Échec de la génération",
     // Settings
-    settingsTitle: "Configurer l'insight IA",
-    settingsDesc: "Après avoir configuré la clé API DeepSeek, l'IA peut analyser vos inspirations, découvrir des schémas de pensée et des connexions plus profondes.",
+    settingsTitle: "Paramètres",
+    settingsDesc: "Personnalisez la langue, le thème et les options d'insight IA.",
     apiKey: "Clé API",
     apiUrl: "URL de l'API (optionnel)",
     modelLabel: "Modèle",
