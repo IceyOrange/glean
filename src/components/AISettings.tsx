@@ -27,8 +27,12 @@ const AI_PRESETS: AIPreset[] = [
   { key: "deepseek", labelKey: "aiProviderDeepseek", baseUrl: "https://api.deepseek.com", model: "deepseek-chat" },
   { key: "siliconflow", labelKey: "aiProviderSiliconflow", baseUrl: "https://api.siliconflow.cn", model: "deepseek-ai/DeepSeek-V3" },
   { key: "openai", labelKey: "aiProviderOpenai", baseUrl: "https://api.openai.com", model: "gpt-4o-mini" },
+  { key: "kimi", labelKey: "aiProviderKimi", baseUrl: "https://api.moonshot.cn", model: "moonshot-v1-8k" },
+  { key: "zhipu", labelKey: "aiProviderZhipu", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
   { key: "anthropic", labelKey: "aiProviderAnthropic", baseUrl: "https://api.anthropic.com", model: "claude-3-5-sonnet-20241022" },
 ];
+
+const VISIBLE_PRESET_COUNT = 4;
 
 
 
@@ -110,6 +114,10 @@ export function AIConfigForm({
   const [baseUrlInput, setBaseUrlInput] = useState("");
   const [modelInput, setModelInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showAllPresets, setShowAllPresets] = useState(false);
+  const visiblePresets = showAllPresets
+    ? AI_PRESETS
+    : AI_PRESETS.slice(0, VISIBLE_PRESET_COUNT);
   const [configSaved, setConfigSaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<"ok" | "fail" | null>(null);
@@ -216,8 +224,8 @@ export function AIConfigForm({
       {/* Provider presets */}
       <div>
         <label className="block text-xs text-ink-600 mb-1">{tr("aiPresetLabel")}</label>
-        <div className="flex gap-1 bg-line-soft rounded-lg p-1">
-          {AI_PRESETS.map((preset) => (
+        <div className="flex flex-wrap gap-1">
+          {visiblePresets.map((preset) => (
             <button
               key={preset.key}
               onClick={() => {
@@ -225,11 +233,17 @@ export function AIConfigForm({
                 setModelInput(preset.model);
               }}
               title={tr(preset.labelKey)}
-              className="flex-1 min-w-0 px-1 py-1.5 text-[10px] leading-none rounded-md text-ink-600 hover:text-ink-900 hover:bg-surface transition-colors truncate"
+              className="flex-1 min-w-[52px] max-w-[50%] px-1 py-1.5 text-[10px] leading-none rounded-md bg-line-soft text-ink-600 hover:text-ink-900 hover:bg-surface transition-colors truncate"
             >
               {tr(preset.labelKey)}
             </button>
           ))}
+          <button
+            onClick={() => setShowAllPresets((v) => !v)}
+            className="flex-1 min-w-[52px] max-w-[50%] px-1 py-1.5 text-[10px] leading-none rounded-md bg-line-soft text-ink-500 hover:text-ink-900 hover:bg-surface transition-colors"
+          >
+            {showAllPresets ? tr("showLess") : tr("showMore")}
+          </button>
         </div>
       </div>
 
