@@ -73,10 +73,10 @@ async function callAI(
         "x-api-key": config.apiKey,
         "anthropic-version": "2023-06-01",
       },
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({
         model: config.model ?? "claude-3-5-sonnet-20241022",
-        max_tokens: jsonMode ? 1500 : 1200,
+        max_tokens: jsonMode ? 2048 : 1600,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       }),
@@ -101,7 +101,7 @@ async function callAI(
       { role: "user", content: userPrompt },
     ],
     temperature: 0.7,
-    max_tokens: jsonMode ? 1500 : 1200,
+    max_tokens: jsonMode ? 2048 : 1600,
   };
   if (jsonMode) {
     body.response_format = { type: "json_object" };
@@ -113,7 +113,7 @@ async function callAI(
       "Content-Type": "application/json",
       Authorization: "Bearer " + config.apiKey,
     },
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(60_000),
     body: JSON.stringify(body),
   });
 
@@ -256,6 +256,25 @@ export async function analyzeMindset(
   try {
     return JSON.parse(content) as MindsetAnalysis;
   } catch {
+    // Fallback: try to extract JSON from a markdown code block or surrounding text
+    // (some models, especially Anthropic, may wrap JSON in ```json ... ```)
+    const jsonMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[1]) as MindsetAnalysis;
+      } catch {
+        // fall through
+      }
+    }
+    // Last resort: find the first { ... } block
+    const braceMatch = content.match(/\{[\s\S]*\}/);
+    if (braceMatch) {
+      try {
+        return JSON.parse(braceMatch[0]) as MindsetAnalysis;
+      } catch {
+        // fall through
+      }
+    }
     throw new Error("Invalid AI response format");
   }
 }

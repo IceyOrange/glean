@@ -14,7 +14,18 @@ export default defineConfig({
         strict_min_version: "109.0",
       },
     },
-    host_permissions: ["<all_urls>", "https://api.notion.com/*", "https://dav.jianguoyun.com/*"],
+    host_permissions: [
+      "<all_urls>",
+      "https://api.notion.com/*",
+      "https://dav.jianguoyun.com/*",
+      "https://webdav.pcloud.com/*",
+      "https://api.deepseek.com/*",
+      "https://api.siliconflow.cn/*",
+      "https://api.openai.com/*",
+      "https://api.moonshot.cn/*",
+      "https://open.bigmodel.cn/*",
+      "https://api.anthropic.com/*",
+    ],
     content_scripts: [
       {
         matches: ["<all_urls>"],

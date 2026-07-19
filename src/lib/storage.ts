@@ -74,7 +74,7 @@ export async function updateCard(
       ...cards[index],
       ...updates,
       source: updates.source
-        ? { ...cards[index].source, ...updates.source }
+        ? { ...cards[index].source, ...Object.fromEntries(Object.entries(updates.source).filter(([, v]) => v !== undefined)) }
         : cards[index].source,
     };
     await chrome.storage.local.set({ [STORAGE_KEY]: cards });

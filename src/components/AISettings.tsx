@@ -28,7 +28,7 @@ const AI_PRESETS: AIPreset[] = [
   { key: "siliconflow", labelKey: "aiProviderSiliconflow", baseUrl: "https://api.siliconflow.cn", model: "deepseek-ai/DeepSeek-V3" },
   { key: "openai", labelKey: "aiProviderOpenai", baseUrl: "https://api.openai.com", model: "gpt-4o-mini" },
   { key: "kimi", labelKey: "aiProviderKimi", baseUrl: "https://api.moonshot.cn", model: "moonshot-v1-8k" },
-  { key: "zhipu", labelKey: "aiProviderZhipu", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
+  { key: "zhipu", labelKey: "aiProviderZhipu", baseUrl: "https://open.bigmodel.cn/api/paas", model: "glm-4-flash" },
   { key: "anthropic", labelKey: "aiProviderAnthropic", baseUrl: "https://api.anthropic.com", model: "claude-3-5-sonnet-20241022" },
 ];
 
