@@ -25,6 +25,7 @@ Thumbs.db
 
 # MCP / runtime artifacts
 .playwright-mcp/
+.claude/
 
 # Editor / IDE
 .vscode/
