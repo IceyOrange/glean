@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title data-i18n="meta_title">Glean — A quiet place for the sentences that stay with you</title>
+<meta name="description" content="Glean is a quiet browser extension for clipping quotes and thoughts from the web. Highlight a sentence, leave a thought, watch your ideas connect." data-i18n="meta_description" data-i18n-attr="content" />
+<link rel="icon" type="image/svg+xml" href="./icon.svg" />
+<style>
+  /* ─────────────────────────────────────────────
+     Tokens — same OKLCH system as the extension
+     ───────────────────────────────────────────── */
+  :root {
+    --paper: 97.4% 0.008 90;
+    --surface: 99.2% 0.004 90;
+    --ink-900: 29% 0.02 80;
+    --ink-800: 33% 0.018 80;
+    --ink-700: 37% 0.016 80;
+    --ink-600: 45% 0.015 80;
+    --ink-500: 52% 0.013 85;
+    --ink-400: 60% 0.012 85;
+    --ink-300: 72% 0.01 88;
+    --line: 90% 0.008 90;
+    --line-soft: 94% 0.006 90;
+    --seal: 52% 0.14 38;
+    --seal-soft: 94% 0.03 40;
+    --ochre: 60% 0.1 78;
+    --sage: 54% 0.06 155;
+
+    --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+    --space-4: 16px; --space-5: 24px; --space-6: 32px;
+    --space-7: 48px; --space-8: 64px; --space-9: 96px;
+
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --serif: "Literata", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+
+  html.dark {
+    --paper: 25% 0.015 80;
+    --surface: 29.5% 0.016 80;
+    --ink-900: 93% 0.008 90;
+    --ink-800: 89% 0.009 90;
+    --ink-700: 85% 0.01 85;
+    --ink-600: 78% 0.01 85;
+    --ink-500: 70% 0.011 85;
+    --ink-400: 62% 0.012 85;
+    --ink-300: 50% 0.012 85;
+    --line: 38% 0.014 82;
+    --line-soft: 33% 0.013 82;
+    --seal: 63% 0.16 38;
+    --seal-soft: 34% 0.06 40;
+    --ochre: 70% 0.1 78;
+    --sage: 68% 0.08 155;
+  }
+
+  /* ── Base ── */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: oklch(var(--paper));
+    color: oklch(var(--ink-900));
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.4s ease, color 0.4s ease;
+  }
+
+  /* Very faint paper grain — felt, not seen */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  html.dark body::before { opacity: 0.04; }
+
+  ::selection { background: oklch(var(--seal-soft)); color: oklch(var(--ink-900)); }
+
+  a { color: inherit; text-decoration: none; }
+
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+  :focus-visible {
+    outline: 2px solid oklch(var(--seal) / 0.45);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .wrap { max-width: 1080px; margin-inline: auto; padding-inline: var(--space-5); }
+
+  main { position: relative; z-index: 2; }
+
+  /* ── Fonts ── */
+  @font-face {
+    font-family: "Literata";
+    font-style: normal;
+    font-weight: 200 900;
+    font-display: swap;
+    src: url("./fonts/literata-latin.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Literata";
+    font-style: italic;
+    font-weight: 200 900;
+    font-display: swap;
+    src: url("./fonts/literata-italic-latin.woff2") format("woff2");
+  }
+
+  /* ── Reveal on scroll ── */
+  .js [data-reveal] {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+      opacity 0.8s var(--ease-out) var(--d, 0s),
+      transform 0.8s var(--ease-out) var(--d, 0s);
+  }
+  .js [data-reveal].in { opacity: 1; transform: none; }
+
+  /* ── Header ── */
+  .site-head {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-5) var(--space-6);
+  }
+  .wordmark {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .wordmark em { color: oklch(var(--seal)); font-style: normal; }
+  .head-right { display: flex; align-items: center; gap: var(--space-3); }
+  .head-link {
+    font-size: 13px;
+    color: oklch(var(--ink-500));
+    transition: color 0.25s ease;
+    padding: 4px 6px;
+    margin-right: var(--space-1);
+  }
+  .head-link:hover { color: oklch(var(--ink-900)); }
+
+  .theme-toggle {
+    display: grid;
+    place-items: center;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    color: oklch(var(--ink-400));
+    transition: color 0.25s ease, background 0.25s ease;
+  }
+  .theme-toggle:hover { color: oklch(var(--ink-700)); background: oklch(var(--surface)); }
+  .theme-toggle svg { width: 16px; height: 16px; }
+  html.dark .icon-sun { display: none; }
+  html:not(.dark) .icon-moon { display: none; }
+
+  .lang-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid oklch(var(--line));
+    border-radius: 999px;
+  }
+  .lang-btn {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    padding: 4px 9px;
+    border-radius: 999px;
+    color: oklch(var(--ink-500));
+    transition: color 0.25s ease, background 0.25s ease;
+  }
+  .lang-btn:hover { color: oklch(var(--ink-900)); }
+  .lang-btn.active {
+    background: oklch(var(--ink-900));
+    color: oklch(var(--paper));
+  }
+
+  /* ── Hero ── */
+  .hero {
+    --mark-size: clamp(64px, 9vw, 120px);
+    --mark-gap: var(--space-2);
+    min-height: 100svh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: clamp(40px, 6vw, 80px);
+    padding:
+      calc(var(--space-8) + var(--space-3))
+      var(--space-6)
+      var(--space-7);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-title-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.18em;
+  }
+
+  .hero-mark-wrap {
+    position: absolute;
+    right: 100%;
+    top: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    z-index: 0;
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  .hero-content {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-left: clamp(40px, 5vw, 72px);
+  }
+
+  .hero-mark {
+    font-family: var(--serif);
+    font-size: var(--mark-size);
+    line-height: 1;
+    color: oklch(var(--seal));
+    opacity: 0.85;
+    user-select: none;
+    animation: breathe 5.5s ease-in-out infinite;
+    transform-origin: right 70%;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: scale(1);    opacity: 0.85; }
+    50%      { transform: scale(1.04); opacity: 1; }
+  }
+
+  .hero-title {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(1.85rem, 3.8vw, 2.8rem);
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    max-width: 14em;
+    text-wrap: balance;
+    text-align: left;
+  }
+
+  .hero-sub {
+    margin-top: var(--space-4);
+    font-size: 14px;
+    line-height: 1.75;
+    color: oklch(var(--ink-500));
+    max-width: 30em;
+    text-align: left;
+  }
+
+  .hero-cta {
+    margin-top: var(--space-6);
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: oklch(var(--ink-900));
+    color: oklch(var(--paper));
+    font-size: 14px;
+    font-weight: 500;
+    padding: 13px 24px;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px oklch(var(--ink-900) / 0.12);
+    transition: transform 0.2s var(--ease-out), background 0.25s ease, box-shadow 0.25s ease;
+  }
+  .btn-primary:hover {
+    background: oklch(var(--ink-800));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px oklch(var(--ink-900) / 0.18);
+  }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-primary svg { width: 15px; height: 15px; }
+
+  .btn-ghost {
+    font-size: 13px;
+    color: oklch(var(--ink-500));
+    border-bottom: 1px solid oklch(var(--line));
+    padding-bottom: 1px;
+    transition: color 0.25s ease, border-color 0.25s ease;
+  }
+  .btn-ghost:hover { color: oklch(var(--ink-900)); border-color: oklch(var(--ink-400)); }
+
+  .hero-fade { opacity: 0; animation: rise 1.1s var(--ease-out) forwards; animation-delay: var(--d, 0s); }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .scroll-hint {
+    position: absolute;
+    bottom: var(--space-5);
+    left: 50%;
+    transform: translateX(-50%);
+    grid-column: 1 / -1;
+    color: oklch(var(--ink-300));
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  @media (max-width: 900px) { .scroll-hint { bottom: var(--space-4); } }
+
+  /* ── Section scaffolding ── */
+  section { padding-block: clamp(56px, 7vw, 80px); position: relative; }
+
+  .kicker {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: oklch(var(--ink-400));
+    margin-bottom: var(--space-4);
+  }
+  .kicker::after {
+    content: "";
+    display: inline-block;
+    width: 32px;
+    height: 1px;
+    background: oklch(var(--line));
+    margin-left: var(--space-3);
+    vertical-align: middle;
+  }
+
+  .section-title {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(1.6rem, 3.4vw, 2.4rem);
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    max-width: 20em;
+    text-wrap: balance;
+  }
+
+  .section-lede {
+    margin-top: var(--space-4);
+    color: oklch(var(--ink-500));
+    font-size: 15px;
+    line-height: 1.8;
+    max-width: 38em;
+  }
+
+  /* ── The flow (Quote → Thought → Reflect) ── */
+  .flow {
+    margin-top: var(--space-7);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-6);
+  }
+  @media (max-width: 760px) { .flow { grid-template-columns: 1fr; gap: var(--space-5); } }
+
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .flow-num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 24px;
+    color: oklch(var(--seal));
+    line-height: 1.3;
+  }
+  .flow-word {
+    font-family: var(--serif);
+    font-size: clamp(1.25rem, 2.4vw, 1.55rem);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin-bottom: var(--space-1);
+  }
+  .flow-desc { font-size: 14px; line-height: 1.75; color: oklch(var(--ink-600)); max-width: 34em; }
+
+  /* ── Live demo: how a card is born ── */
+  .hero-demo {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    align-self: center;
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: none;
+    padding-inline: 0;
+  }
+  .hero-demo .demo-stage { text-align: left; }
+
+  @media (max-width: 900px) {
+    .hero {
+      grid-template-columns: 1fr;
+      align-content: start;
+      text-align: center;
+      gap: var(--space-6);
+      padding: calc(var(--space-8) + var(--space-4)) var(--space-5) var(--space-7);
+    }
+    .hero-title-row {
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .hero-mark-wrap {
+      position: static;
+      top: auto; right: auto;
+      height: auto;
+      display: block;
+      pointer-events: none;
+    }
+    .hero-mark { transform-origin: center 70%; opacity: 0.9; }
+    .hero-content { grid-column: 1 / -1; grid-row: auto; align-items: center; margin-left: 0; }
+    .hero-title, .hero-sub { text-align: center; }
+    .hero-cta { justify-content: center; }
+    .hero-demo { grid-column: 1 / -1; grid-row: auto; align-self: auto; max-width: 520px; margin-inline: auto; }
+  }
+  .demo-stage {
+    position: relative;
+    border: 1px solid oklch(var(--line-soft));
+    border-radius: 20px;
+    background: oklch(var(--surface));
+    padding: var(--space-6);
+    overflow: hidden;
+    box-shadow:
+      0 1px 2px oklch(var(--ink-900) / 0.04),
+      0 12px 32px oklch(var(--ink-900) / 0.06);
+  }
+  .demo-caption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: oklch(var(--ink-400));
+    margin-bottom: var(--space-4);
+  }
+  .demo-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: oklch(var(--seal));
+    animation: dot-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 0.45; transform: scale(1); }
+    50%      { opacity: 1;    transform: scale(1.4); }
+  }
+  .demo-article p {
+    font-size: 14px;
+    line-height: 1.85;
+    color: oklch(var(--ink-600));
+  }
+  .demo-hl {
+    background: linear-gradient(oklch(var(--seal-soft)), oklch(var(--seal-soft)))
+                no-repeat 0 0 / 0% 100%;
+    border-radius: 3px;
+    padding: 1px 0;
+    transition: background-size 1s var(--ease-out);
+  }
+  .demo-hl.on { background-size: 100% 100%; }
+  .demo-mark-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-left: 6px;
+    border-radius: 8px;
+    background: oklch(var(--surface));
+    border: 1px solid oklch(var(--line-soft));
+    color: oklch(var(--ink-700));
+    box-shadow: 0 3px 10px oklch(var(--ink-900) / 0.05), 0 1px 3px oklch(var(--ink-900) / 0.03);
+    vertical-align: -6px;
+    transform: scale(0);
+    transition: transform 0.4s var(--ease-out), box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .demo-mark-btn.on { transform: scale(1); }
+  .demo-mark-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+  }
+  .demo-card {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px dashed oklch(var(--line-soft));
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out);
+  }
+  .demo-card.on { opacity: 1; transform: none; }
+  .demo-card-quote {
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: oklch(var(--ink-900));
+  }
+  .demo-card-quote::before { content: "“"; color: oklch(var(--seal)); margin-right: 1px; }
+  .demo-card-quote::after  { content: "”"; color: oklch(var(--seal)); margin-left: 1px; }
+  .demo-card-attr {
+    font-size: 11px;
+    color: oklch(var(--ink-400));
+    margin-top: 4px;
+  }
+  .demo-thought-row {
+    display: flex;
+    gap: var(--space-3);
+    align-items: flex-start;
+    margin-top: var(--space-3);
+  }
+  .demo-thought-row svg {
+    flex-shrink: 0;
+    width: 13px; height: 13px;
+    color: oklch(var(--ink-300));
+    margin-top: 5px;
+  }
+  .demo-thought {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    line-height: 1.75;
+    color: oklch(var(--ink-600));
+    min-height: 1.75em;
+  }
+  .demo-caret {
+    display: inline-block;
+    width: 1px;
+    height: 1em;
+    margin-left: 1px;
+    vertical-align: -2px;
+    background: oklch(var(--seal));
+    animation: caret-blink 0.9s steps(1) infinite;
+  }
+  @keyframes caret-blink { 50% { opacity: 0; } }
+  .demo-saved {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: var(--space-3);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: oklch(var(--sage));
+    opacity: 0;
+    transition: opacity 0.45s ease;
+  }
+  .demo-saved.on { opacity: 1; }
+  .demo-saved svg { width: 12px; height: 12px; }
+
+  /* ── Wall of Thoughts ── */
+  .wall-head { margin-bottom: var(--space-5); }
+
+  .sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+  }
+  .source-btn {
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid oklch(var(--line));
+    color: oklch(var(--ink-500));
+    transition: all 0.25s var(--ease-out);
+  }
+  .source-btn:hover { color: oklch(var(--ink-900)); border-color: oklch(var(--ink-400)); }
+  .source-btn.active {
+    background: oklch(var(--ink-900));
+    color: oklch(var(--paper));
+    border-color: oklch(var(--ink-900));
+  }
+
+  .wall {
+    position: relative;
+    columns: 3;
+    column-gap: var(--space-3);
+  }
+  @media (max-width: 900px) { .wall { columns: 2; } }
+  @media (max-width: 560px) { .wall { columns: 1; } }
+
+  .wall-links {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    overflow: visible;
+  }
+  .wall-links line {
+    stroke: oklch(var(--seal));
+    stroke-width: 1;
+    stroke-dasharray: 2 5;
+    stroke-linecap: round;
+    opacity: 0;
+    animation: link-in 0.6s var(--ease-out) forwards;
+  }
+  @keyframes link-in { to { opacity: 0.5; } }
+
+  .card {
+    break-inside: avoid;
+    margin-bottom: var(--space-3);
+    border: 1px solid oklch(var(--line-soft));
+    border-radius: 14px;
+    background: oklch(var(--surface));
+    padding: var(--space-4);
+    transition:
+      opacity 0.35s ease,
+      transform 0.35s var(--ease-out),
+      border-color 0.35s ease;
+  }
+  @media (hover: hover) {
+    .card:hover { transform: translateY(-2px); border-color: oklch(var(--line)); }
+  }
+  .wall.filtering .card,
+  .wall.hovering .card { opacity: 0.28; }
+  .wall.filtering .card.match,
+  .wall.hovering .card.match {
+    opacity: 1;
+    transform: translateY(-2px);
+    border-color: oklch(var(--line));
+  }
+  .card-quote {
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: oklch(var(--ink-900));
+    hanging-punctuation: first;
+  }
+  .card-quote::before { content: "“"; color: oklch(var(--seal)); margin-right: 1px; }
+  .card-quote::after { content: "”"; color: oklch(var(--seal)); margin-left: 1px; }
+  .card-attr { font-size: 11px; color: oklch(var(--ink-400)); margin-top: 4px; }
+  .card-thought {
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px dashed oklch(var(--line-soft));
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: oklch(var(--ink-600));
+  }
+  .card-meta {
+    margin-top: var(--space-2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10.5px;
+    color: oklch(var(--ink-300));
+  }
+  .card-source { letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; font-weight: 600; }
+  .card-source.seal  { color: oklch(var(--seal)); }
+  .card-source.ochre { color: oklch(var(--ochre)); }
+  .card-source.sage  { color: oklch(var(--sage)); }
+
+  /* ── Quiet features ── */
+  .quiet-grid {
+    margin-top: var(--space-7);
+    display: grid;
+    grid-template-columns: minmax(200px, 1fr) 2fr;
+    gap: var(--space-6);
+  }
+  @media (max-width: 720px) { .quiet-grid { grid-template-columns: 1fr; gap: var(--space-5); } }
+
+  .quiet-list { display: grid; }
+  .quiet-item {
+    display: grid;
+    grid-template-columns: minmax(140px, 200px) 1fr;
+    gap: var(--space-5);
+    padding: var(--space-5) 0;
+    border-top: 1px solid oklch(var(--line-soft));
+  }
+  .quiet-item:last-child { border-bottom: 1px solid oklch(var(--line-soft)); }
+  @media (max-width: 560px) { .quiet-item { grid-template-columns: 1fr; gap: var(--space-2); } }
+
+  .quiet-term { font-family: var(--serif); font-size: 16px; font-weight: 500; }
+  .quiet-def { font-size: 14px; line-height: 1.75; color: oklch(var(--ink-600)); max-width: 40em; }
+
+  /* ── Closing ── */
+  .closing {
+    min-height: 80svh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: clamp(56px, 7vw, 80px) var(--space-5);
+  }
+  .closing-mark {
+    font-family: var(--serif);
+    font-size: clamp(72px, 10vw, 120px);
+    line-height: 0.8;
+    color: oklch(var(--seal));
+    user-select: none;
+    margin-bottom: var(--space-6);
+    animation: breathe 5.5s ease-in-out infinite;
+    transform-origin: center 70%;
+  }
+  .closing-title {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(1.9rem, 4.4vw, 3rem);
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    max-width: 16em;
+    text-wrap: balance;
+  }
+  .closing-brand {
+    margin-top: var(--space-6);
+    font-family: var(--serif);
+    font-size: 15px;
+    color: oklch(var(--ink-500));
+  }
+  .closing-brand b {
+    font-weight: 600;
+    color: oklch(var(--ink-900));
+    font-size: 19px;
+    display: block;
+    margin-bottom: var(--space-1);
+  }
+  .closing-cta { margin-top: var(--space-7); }
+
+  /* ── Footer ── */
+  .site-foot {
+    border-top: 1px solid oklch(var(--line-soft));
+    padding: var(--space-5) var(--space-6);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: oklch(var(--ink-400));
+  }
+  .site-foot a { border-bottom: 1px solid transparent; transition: color 0.25s ease; }
+  .site-foot a:hover { color: oklch(var(--ink-700)); }
+  .foot-right { display: flex; gap: var(--space-5); }
+
+  /* ── Reduced motion ── */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    .js [data-reveal] { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-head">
+  <span class="wordmark">Glean<em>.</em></span>
+  <div class="head-right">
+    <a class="head-link" href="https://github.com/IceyOrange/glean" target="_blank" rel="noopener">GitHub</a>
+    <div class="lang-switch" role="group" aria-label="Language switch">
+      <button class="lang-btn active" data-set-lang="en">EN</button>
+      <button class="lang-btn" data-set-lang="zh">中文</button>
+    </div>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- ═══ Hero ═══ -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-title-row">
+        <!-- Large opening quotation mark hugging the title from the left -->
+        <div class="hero-mark-wrap hero-fade" id="heroMarkWrap" style="--d:.1s">
+          <div class="hero-mark" aria-hidden="true">“</div>
+        </div>
+        <h1 class="hero-title hero-fade" data-i18n="hero_title" style="--d:.7s">Keep what moves you.</h1>
+      </div>
+      <p class="hero-sub hero-fade" data-i18n="hero_sub" style="--d:1.15s">
+        Highlight a sentence. Leave a thought. Watch your ideas connect.
+        Glean is a quiet browser extension for the sentences that stay with you.
+      </p>
+      <div class="hero-cta hero-fade" style="--d:1.55s">
+        <a class="btn-primary" href="https://github.com/IceyOrange/glean" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span data-i18n="cta_add">Add to Chrome</span>
+        </a>
+        <a class="btn-ghost" href="https://github.com/IceyOrange/glean" target="_blank" rel="noopener" data-i18n="cta_github">View source on GitHub</a>
+      </div>
+    </div>
+
+    <!-- Live demo: quote → thought → saved, on a loop -->
+    <div class="hero-demo hero-fade" data-reveal style="--d:1.9s">
+      <div class="demo-stage" id="demoStage">
+        <p class="demo-caption">
+          <span class="demo-dot" aria-hidden="true"></span>
+          <span data-i18n="demo_caption">Live — how a card is born</span>
+        </p>
+        <div class="demo-article">
+          <p>
+            <span data-i18n="demo_pre">Most highlights die in a folder somewhere.</span>
+            <span class="demo-hl" id="demoHl" data-i18n="demo_hl">The good ones stay with you.</span><button class="demo-mark-btn" id="demoMark" aria-hidden="true" tabindex="-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311C9.591 11.69 11 13.166 11 15c0 1.933-1.567 3.5-3.5 3.5-1.193 0-2.31-.565-2.917-1.179zM14.583 17.321C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311C19.591 11.69 21 13.166 21 15c0 1.933-1.567 3.5-3.5 3.5-1.193 0-2.31-.565-2.917-1.179z"/></svg></button>
+          </p>
+        </div>
+        <div class="demo-card" id="demoCard">
+          <p class="demo-card-quote" id="demoCardQuote" data-i18n="demo_quote">The good ones stay with you.</p>
+          <p class="demo-card-attr" id="demoCardAttr">— a reminder to keep what matters</p>
+          <div class="demo-thought-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <p class="demo-thought"><span id="demoThoughtText"></span><span class="demo-caret" aria-hidden="true"></span></p>
+          </div>
+          <span class="demo-saved" id="demoSaved">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span data-i18n="demo_saved">Saved to Glean</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <span class="scroll-hint hero-fade" data-i18n="scroll_hint" style="--d:2.4s">Scroll</span>
+  </section>
+
+  <!-- ═══ The flow ═══ -->
+  <section>
+    <div class="wrap">
+      <p class="kicker" data-i18n="flow_kicker" data-reveal>The flow</p>
+      <h2 class="section-title" data-i18n="flow_title" data-i18n-html data-reveal style="--d:.1s">
+        Not every highlight deserves a second brain.<br />Some deserve your first thought.
+      </h2>
+
+      <div class="flow">
+        <div class="flow-step" data-reveal>
+          <span class="flow-num">1.</span>
+          <div>
+            <h3 class="flow-word" data-i18n="flow_step1_word">Highlight</h3>
+            <p class="flow-desc" data-i18n="flow_step1_desc">
+              Select any sentence, on any page. A small quotation mark appears beside
+              your cursor — nothing more. No popup storm, no account wall.
+            </p>
+          </div>
+        </div>
+        <div class="flow-step" data-reveal>
+          <span class="flow-num">2.</span>
+          <div>
+            <h3 class="flow-word" data-i18n="flow_step2_word">Thought</h3>
+            <p class="flow-desc" data-i18n="flow_step2_desc">
+              The moment a quote is saved, write what it made you think.
+              The thought is the point — the quote is just the excuse.
+            </p>
+          </div>
+        </div>
+        <div class="flow-step" data-reveal>
+          <span class="flow-num">3.</span>
+          <div>
+            <h3 class="flow-word" data-i18n="flow_step3_word">Reflect</h3>
+            <p class="flow-desc" data-i18n="flow_step3_desc">
+              When you choose, ask AI about a card or analyze your thinking patterns.
+              It only happens when you trigger it — using your own API key.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Wall of Thoughts ═══ -->
+  <section>
+    <div class="wrap">
+      <div class="wall-head">
+        <p class="kicker" data-i18n="wall_kicker" data-reveal>The wall</p>
+        <h2 class="section-title" data-i18n="wall_title" data-reveal style="--d:.1s">What have you been thinking?</h2>
+        <p class="section-lede" data-i18n="wall_lede" data-reveal style="--d:.2s">
+          Every card is a sentence someone stopped for, and the thought it left behind.
+          Pick a source — see what you saved from the same place.
+        </p>
+        <div class="sources" data-reveal style="--d:.3s" role="group" aria-label="Filter cards by source">
+          <button class="source-btn active" data-source="all" data-i18n="source_all">All</button>
+          <button class="source-btn" data-source="aeon" data-i18n="source_aeon">Aeon</button>
+          <button class="source-btn" data-source="longreads" data-i18n="source_longreads">Longreads</button>
+          <button class="source-btn" data-source="hackernews" data-i18n="source_hackernews">Hacker News</button>
+          <button class="source-btn" data-source="marginalian" data-i18n="source_marginalian">The Marginalian</button>
+          <button class="source-btn" data-source="farnamstreet" data-i18n="source_farnamstreet">Farnam Street</button>
+          <button class="source-btn" data-source="ribbonfarm" data-i18n="source_ribbonfarm">Ribbonfarm</button>
+          <button class="source-btn" data-source="newyorker" data-i18n="source_newyorker">The New Yorker</button>
+        </div>
+      </div>
+
+      <div class="wall" id="wall" data-reveal style="--d:.35s">
+        <svg class="wall-links" id="wallLinks" aria-hidden="true"></svg>
+
+        <article class="card" data-source="aeon">
+          <p class="card-quote" data-i18n="card1_quote">Creativity is intelligence having fun.</p>
+          <p class="card-attr" data-i18n="card1_attr">attributed to Einstein</p>
+          <p class="card-thought" data-i18n="card1_thought">We keep asking AI for answers instead of asking ourselves better questions.</p>
+          <div class="card-meta"><span class="card-source seal" data-i18n="source_aeon">Aeon</span><span data-i18n="card1_date">Jul 18</span></div>
+        </article>
+
+        <article class="card" data-source="longreads">
+          <p class="card-quote" data-i18n="card2_quote">How do I know what I think until I see what I say?</p>
+          <p class="card-attr" data-i18n="card2_attr">E. M. Forster</p>
+          <p class="card-thought" data-i18n="card2_thought">The thought box is the point. The quote is just the excuse.</p>
+          <div class="card-meta"><span class="card-source ochre" data-i18n="source_longreads">Longreads</span><span data-i18n="card2_date">Jul 17</span></div>
+        </article>
+
+        <article class="card" data-source="longreads">
+          <p class="card-quote" data-i18n="card3_quote">Almost everything will work again if you unplug it for a few minutes, including you.</p>
+          <p class="card-attr" data-i18n="card3_attr">Anne Lamott</p>
+          <p class="card-thought" data-i18n="card3_thought">Note to self: unplug more.</p>
+          <div class="card-meta"><span class="card-source ochre" data-i18n="source_longreads">Longreads</span><span data-i18n="card3_date">Jul 17</span></div>
+        </article>
+
+        <article class="card" data-source="hackernews">
+          <p class="card-quote" data-i18n="card4_quote">Make something people want.</p>
+          <p class="card-attr" data-i18n="card4_attr">Paul Graham</p>
+          <p class="card-thought" data-i18n="card4_thought">And want to keep. Retention is love measured over time.</p>
+          <div class="card-meta"><span class="card-source sage" data-i18n="source_hackernews">Hacker News</span><span data-i18n="card4_date">Jul 15</span></div>
+        </article>
+
+        <article class="card" data-source="marginalian">
+          <p class="card-quote" data-i18n="card5_quote">We read to know we're not alone.</p>
+          <p class="card-attr" data-i18n="card5_attr">William Nicholson</p>
+          <p class="card-thought" data-i18n="card5_thought">Maybe that's why I save sentences — they're company.</p>
+          <div class="card-meta"><span class="card-source sage" data-i18n="source_marginalian">The Marginalian</span><span data-i18n="card5_date">Jul 14</span></div>
+        </article>
+
+        <article class="card" data-source="farnamstreet">
+          <p class="card-quote" data-i18n="card6_quote">Perfection is achieved not when there is nothing more to add, but when there is nothing left to take away.</p>
+          <p class="card-attr" data-i18n="card6_attr">Antoine de Saint-Exupéry</p>
+          <p class="card-thought" data-i18n="card6_thought">Applies to code, to essays, and to this very page.</p>
+          <div class="card-meta"><span class="card-source seal" data-i18n="source_farnamstreet">Farnam Street</span><span data-i18n="card6_date">Jul 12</span></div>
+        </article>
+
+        <article class="card" data-source="ribbonfarm">
+          <p class="card-quote" data-i18n="card7_quote">Education is not the filling of a pail, but the lighting of a fire.</p>
+          <p class="card-attr" data-i18n="card7_attr">W. B. Yeats</p>
+          <p class="card-thought" data-i18n="card7_thought">Every card here is a small flame, not a bucket.</p>
+          <div class="card-meta"><span class="card-source ochre" data-i18n="source_ribbonfarm">Ribbonfarm</span><span data-i18n="card7_date">Jul 11</span></div>
+        </article>
+
+        <article class="card" data-source="aeon">
+          <p class="card-quote" data-i18n="card8_quote">You can't use up creativity. The more you use, the more you have.</p>
+          <p class="card-attr" data-i18n="card8_attr">Maya Angelou</p>
+          <p class="card-thought" data-i18n="card8_thought">Scarcity mindset doesn't apply to ideas.</p>
+          <div class="card-meta"><span class="card-source seal" data-i18n="source_aeon">Aeon</span><span data-i18n="card8_date">Jul 09</span></div>
+        </article>
+
+        <article class="card" data-source="newyorker">
+          <p class="card-quote" data-i18n="card9_quote">The days are long but the decades are short.</p>
+          <p class="card-attr" data-i18n="card9_attr">Sam Altman</p>
+          <p class="card-thought" data-i18n="card9_thought">Read this at 1:30am. Both halves are true.</p>
+          <div class="card-meta"><span class="card-source seal" data-i18n="source_newyorker">The New Yorker</span><span data-i18n="card9_date">Jul 08</span></div>
+        </article>
+
+        <article class="card" data-source="longreads">
+          <p class="card-quote" data-i18n="card10_quote">The scariest moment is always just before you start.</p>
+          <p class="card-attr" data-i18n="card10_attr">Stephen King</p>
+          <p class="card-thought" data-i18n="card10_thought">One sentence in, the fear was gone.</p>
+          <div class="card-meta"><span class="card-source ochre" data-i18n="source_longreads">Longreads</span><span data-i18n="card10_date">Jul 06</span></div>
+        </article>
+
+        <article class="card" data-source="marginalian">
+          <p class="card-quote" data-i18n="card11_quote">A reader lives a thousand lives before he dies.</p>
+          <p class="card-attr" data-i18n="card11_attr">George R. R. Martin</p>
+          <p class="card-thought" data-i18n="card11_thought">Glean is my attempt to remember at least a few of them.</p>
+          <div class="card-meta"><span class="card-source sage" data-i18n="source_marginalian">The Marginalian</span><span data-i18n="card11_date">Jul 03</span></div>
+        </article>
+
+        <article class="card" data-source="farnamstreet">
+          <p class="card-quote" data-i18n="card12_quote">Design is intelligence made visible.</p>
+          <p class="card-attr" data-i18n="card12_attr">Alina Wheeler</p>
+          <p class="card-thought" data-i18n="card12_thought">Good design is quiet. It doesn't ask for attention; it earns trust.</p>
+          <div class="card-meta"><span class="card-source seal" data-i18n="source_farnamstreet">Farnam Street</span><span data-i18n="card12_date">Jun 30</span></div>
+        </article>
+
+        <article class="card" data-source="hackernews">
+          <p class="card-quote" data-i18n="card13_quote">Simplicity is the soul of efficiency.</p>
+          <p class="card-attr" data-i18n="card13_attr">Austin Freeman</p>
+          <p class="card-thought" data-i18n="card13_thought">Every feature not added is a feature nobody has to learn.</p>
+          <div class="card-meta"><span class="card-source sage" data-i18n="source_hackernews">Hacker News</span><span data-i18n="card13_date">Jun 27</span></div>
+        </article>
+
+        <article class="card" data-source="ribbonfarm">
+          <p class="card-quote" data-i18n="card14_quote">Tell me and I forget, teach me and I may remember, involve me and I learn.</p>
+          <p class="card-attr" data-i18n="card14_attr">Benjamin Franklin</p>
+          <p class="card-thought" data-i18n="card14_thought">Highlighting is barely involvement. Writing a thought is more.</p>
+          <div class="card-meta"><span class="card-source ochre" data-i18n="source_ribbonfarm">Ribbonfarm</span><span data-i18n="card14_date">Jun 24</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Built for quiet thinking ═══ -->
+  <section>
+    <div class="wrap quiet-grid">
+      <div>
+        <p class="kicker" data-i18n="quiet_kicker" data-reveal>Details</p>
+        <h2 class="section-title" data-i18n="quiet_title" data-reveal style="--d:.1s">Built for quiet thinking.</h2>
+      </div>
+      <div class="quiet-list" data-reveal style="--d:.2s">
+        <div class="quiet-item">
+          <h3 class="quiet-term" data-i18n="quiet_local">Local first</h3>
+          <p class="quiet-def" data-i18n="quiet_local_desc">
+            Your cards live in your browser, not on our servers. AI and sync credentials
+            never leave local storage. Your thoughts stay yours unless you say otherwise.
+          </p>
+        </div>
+        <div class="quiet-item">
+          <h3 class="quiet-term" data-i18n="quiet_dark">Follows the night</h3>
+          <p class="quiet-def" data-i18n="quiet_dark_desc">
+            Dark mode tracks your system, or switch it by hand. The dark theme is warm ink,
+            not cold black — made for reading at midnight.
+          </p>
+        </div>
+        <div class="quiet-item">
+          <h3 class="quiet-term" data-i18n="quiet_sync">Syncs if you want</h3>
+          <p class="quiet-def" data-i18n="quiet_sync_desc">
+            Send cards to a Notion database, or back everything up to Nutstore over WebDAV.
+            Optional, quiet, and off by default.
+          </p>
+        </div>
+        <div class="quiet-item">
+          <h3 class="quiet-term" data-i18n="quiet_lang">Speaks three languages</h3>
+          <p class="quiet-def" data-i18n="quiet_lang_desc">
+            中文, English, and Français — because good sentences are written in every language.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Closing ═══ -->
+  <section class="closing">
+    <div class="closing-mark" data-reveal aria-hidden="true">“</div>
+    <h2 class="closing-title" data-i18n="closing_title" data-reveal style="--d:.15s">There are thoughts worth keeping.</h2>
+    <p class="closing-brand" data-reveal style="--d:.3s">
+      <b>Glean</b>
+      <span data-i18n="closing_tagline">Quietly collect what matters.</span>
+    </p>
+    <div class="closing-cta" data-reveal style="--d:.45s">
+      <a class="btn-primary" href="https://github.com/IceyOrange/glean" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span data-i18n="cta_add">Add to Chrome</span>
+      </a>
+    </div>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <span data-i18n="footer_copy">© 2026 IceyOrange · MIT License</span>
+  <div class="foot-right">
+    <a href="https://github.com/IceyOrange/glean" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/IceyOrange/glean/issues" target="_blank" rel="noopener" data-i18n="footer_feedback">Feedback</a>
+  </div>
+</footer>
+
+<script>
+  // Mark JS as available so reveal-on-scroll hidden state only applies then
+  document.documentElement.classList.add("js");
+
+  // ── Translations ────────────────────────────────
+  var i18n = {
+    en: {
+      meta_title: "Glean — A quiet place for the sentences that stay with you",
+      meta_description: "Glean is a quiet browser extension for clipping quotes and thoughts from the web. Highlight a sentence, leave a thought, watch your ideas connect.",
+      hero_title: "Keep what moves you.",
+      hero_sub: "Highlight a sentence. Leave a thought. Watch your ideas connect. Glean is a quiet browser extension for the sentences that stay with you.",
+      cta_add: "Add to Chrome",
+      cta_github: "View source on GitHub",
+      scroll_hint: "Scroll",
+      flow_kicker: "The flow",
+      flow_title: "Not every highlight deserves a second brain.<br>Some deserve your first thought.",
+      flow_step1_word: "Highlight",
+      flow_step1_desc: "Select any sentence, on any page. A small quotation mark appears beside your cursor — nothing more. No popup storm, no account wall.",
+      flow_step2_word: "Thought",
+      flow_step2_desc: "The moment a quote is saved, write what it made you think. The thought is the point — the quote is just the excuse.",
+      flow_step3_word: "Reflect",
+      flow_step3_desc: "When you choose, ask AI about a card or analyze your thinking patterns. It only happens when you trigger it — using your own API key.",
+      demo_caption: "Live — how a card is born",
+      demo_pre: "Most highlights die in a folder somewhere.",
+      demo_hl: "The good ones stay with you.",
+      demo_quote: "The good ones stay with you.",
+      demo_thought: "keep the sentence, lose the folder.",
+      demo_saved: "Saved to Glean",
+      wall_kicker: "The wall",
+      wall_title: "What have you been thinking?",
+      wall_lede: "Every card is a sentence someone stopped for, and the thought it left behind. Pick a source — see what you saved from the same place.",
+      source_all: "All",
+      source_aeon: "Aeon",
+      source_longreads: "Longreads",
+      source_hackernews: "Hacker News",
+      source_marginalian: "The Marginalian",
+      source_farnamstreet: "Farnam Street",
+      source_ribbonfarm: "Ribbonfarm",
+      source_newyorker: "The New Yorker",
+      card1_quote: "Creativity is intelligence having fun.",
+      card1_attr: "attributed to Einstein",
+      card1_thought: "We keep asking AI for answers instead of asking ourselves better questions.",
+      card1_date: "Jul 18",
+      card2_quote: "How do I know what I think until I see what I say?",
+      card2_attr: "E. M. Forster",
+      card2_thought: "The thought box is the point. The quote is just the excuse.",
+      card2_date: "Jul 17",
+      card3_quote: "Almost everything will work again if you unplug it for a few minutes, including you.",
+      card3_attr: "Anne Lamott",
+      card3_thought: "Note to self: unplug more.",
+      card3_date: "Jul 17",
+      card4_quote: "Make something people want.",
+      card4_attr: "Paul Graham",
+      card4_thought: "And want to keep. Retention is love measured over time.",
+      card4_date: "Jul 15",
+      card5_quote: "We read to know we're not alone.",
+      card5_attr: "William Nicholson",
+      card5_thought: "Maybe that's why I save sentences — they're company.",
+      card5_date: "Jul 14",
+      card6_quote: "Perfection is achieved not when there is nothing more to add, but when there is nothing left to take away.",
+      card6_attr: "Antoine de Saint-Exupéry",
+      card6_thought: "Applies to code, to essays, and to this very page.",
+      card6_date: "Jul 12",
+      card7_quote: "Education is not the filling of a pail, but the lighting of a fire.",
+      card7_attr: "W. B. Yeats",
+      card7_thought: "Every card here is a small flame, not a bucket.",
+      card7_date: "Jul 11",
+      card8_quote: "You can't use up creativity. The more you use, the more you have.",
+      card8_attr: "Maya Angelou",
+      card8_thought: "Scarcity mindset doesn't apply to ideas.",
+      card8_date: "Jul 09",
+      card9_quote: "The days are long but the decades are short.",
+      card9_attr: "Sam Altman",
+      card9_thought: "Read this at 1:30am. Both halves are true.",
+      card9_date: "Jul 08",
+      card10_quote: "The scariest moment is always just before you start.",
+      card10_attr: "Stephen King",
+      card10_thought: "One sentence in, the fear was gone.",
+      card10_date: "Jul 06",
+      card11_quote: "A reader lives a thousand lives before he dies.",
+      card11_attr: "George R. R. Martin",
+      card11_thought: "Glean is my attempt to remember at least a few of them.",
+      card11_date: "Jul 03",
+      card12_quote: "Design is intelligence made visible.",
+      card12_attr: "Alina Wheeler",
+      card12_thought: "Good design is quiet. It doesn't ask for attention; it earns trust.",
+      card12_date: "Jun 30",
+      card13_quote: "Simplicity is the soul of efficiency.",
+      card13_attr: "Austin Freeman",
+      card13_thought: "Every feature not added is a feature nobody has to learn.",
+      card13_date: "Jun 27",
+      card14_quote: "Tell me and I forget, teach me and I may remember, involve me and I learn.",
+      card14_attr: "Benjamin Franklin",
+      card14_thought: "Highlighting is barely involvement. Writing a thought is more.",
+      card14_date: "Jun 24",
+      quiet_kicker: "Details",
+      quiet_title: "Built for quiet thinking.",
+      quiet_local: "Local first",
+      quiet_local_desc: "Your cards live in your browser, not on our servers. AI and sync credentials never leave local storage. Your thoughts stay yours unless you say otherwise.",
+      quiet_dark: "Follows the night",
+      quiet_dark_desc: "Dark mode tracks your system, or switch it by hand. The dark theme is warm ink, not cold black — made for reading at midnight.",
+      quiet_sync: "Syncs if you want",
+      quiet_sync_desc: "Send cards to a Notion database, or back everything up to Nutstore over WebDAV. Optional, quiet, and off by default.",
+      quiet_lang: "Speaks three languages",
+      quiet_lang_desc: "中文, English, and Français — because good sentences are written in every language.",
+      closing_title: "There are thoughts worth keeping.",
+      closing_tagline: "Quietly collect what matters.",
+      footer_copy: "© 2026 IceyOrange · MIT License",
+      footer_feedback: "Feedback"
+    },
+    zh: {
+      meta_title: "Glean — 为那些愿意留下来的句子，留一处安静角落",
+      meta_description: "Glean 是一款安静的浏览器扩展：选中网页上的句子，写下你的想法，让思绪彼此连接。",
+      hero_title: "留下那些打动你的句子。",
+      hero_sub: "选中一句话，写下你的想法，看它们如何彼此连接。Glean 是一款安静的浏览器扩展，为那些愿意留下来的句子而生。",
+      cta_add: "安装到 Chrome",
+      cta_github: "在 GitHub 查看源码",
+      scroll_hint: "向下滚动",
+      flow_kicker: "使用流程",
+      flow_title: "不是每一处高亮都需要第二大脑。<br>有些句子，值得你的第一个想法。",
+      flow_step1_word: "选中",
+      flow_step1_desc: "在任何网页上选中任意句子，光标旁会出现一个小小的双引号——仅此而已。没有弹窗风暴，也没有账户门槛。",
+      flow_step2_word: "写下想法",
+      flow_step2_desc: "当一条引用被保存，立刻写下它让你想到什么。想法才是重点，引用只是由头。",
+      flow_step3_word: "反思",
+      flow_step3_desc: "当你主动选择时，可以向 AI 提问，或让它分析你的思维模式。它不会定期自动生成，也不经过我们的服务器——用的是你自己的 API Key。",
+      demo_caption: "实时演示 — 一张卡片的诞生",
+      demo_pre: "大多数高亮最终都死在了某个文件夹里。",
+      demo_hl: "而好的句子会留下来。",
+      demo_quote: "而好的句子会留下来。",
+      demo_thought: "留下句子，而不是文件夹。",
+      demo_saved: "已保存",
+      wall_kicker: "想法之墙",
+      wall_title: "你最近在想什么？",
+      wall_lede: "每一张卡片，都是某个人为之停留的一句话，以及它留下的想法。选择一个来源——看看你曾在同一个地方保存过什么。",
+      source_all: "全部",
+      source_aeon: "端传媒",
+      source_longreads: "单读",
+      source_hackernews: "少数派",
+      source_marginalian: "利器",
+      source_farnamstreet: "得到",
+      source_ribbonfarm: "看理想",
+      source_newyorker: "三联生活周刊",
+      card1_quote: "我们与远方的陌生人之间的联系，比想象中更密，只是我们假装看不见。",
+      card1_attr: "端传媒 · 一篇关于全球化的专栏",
+      card1_thought: "这句话让人没法继续心安理得地只活在局部里。",
+      card1_date: "7月18日",
+      card2_quote: "理解一个人，往往不是从他做了什么开始，而是从他害怕失去什么开始。",
+      card2_attr: "单读 · 一篇人物特稿",
+      card2_thought: "懂得之后，苛责就消失了。",
+      card2_date: "7月17日",
+      card3_quote: "慢下来不是为了少做事，而是为了不漏掉那些只有慢下来才看得见的东西。",
+      card3_attr: "单读 · 散文",
+      card3_thought: "原来效率的反义词不是慢，是错过。",
+      card3_date: "7月17日",
+      card4_quote: "做一个人们想要的东西，然后愿意一直留着它——留存才是被爱的证据。",
+      card4_attr: "少数派 · 产品笔记",
+      card4_thought: "原来「被使用」和「被留下」是两件事。",
+      card4_date: "7月15日",
+      card5_quote: "我们读，是为了确认自己并不孤单——哪怕那本书的作者早已不在。",
+      card5_attr: "利器 · 一篇访谈",
+      card5_thought: "也许这就是我保存句子的原因：它们是陪伴。",
+      card5_date: "7月14日",
+      card6_quote: "完美不是再没有什么可以加，而是再没有什么可以去掉。",
+      card6_attr: "得到 · 一篇心智专栏",
+      card6_thought: "这句话适用于代码、文章，也适用于这整个页面。",
+      card6_date: "7月12日",
+      card7_quote: "丰富的安静，不是空无一物，而是满到不再需要喧哗。",
+      card7_attr: "看理想 · 哲思随笔",
+      card7_thought: "原来安静是「满」的一种形态。",
+      card7_date: "7月11日",
+      card8_quote: "在充满噪声的时代，保持一种缓慢的注意力，本身就是一种抵抗。",
+      card8_attr: "端传媒 · 文化评论",
+      card8_thought: "停下来摘录一句话，可能就是这种抵抗的最小单位。",
+      card8_date: "7月9日",
+      card9_quote: "人只拥有此生此世是不够的，他还该有一处存放诗意的小角落。",
+      card9_attr: "三联生活周刊 · 专栏",
+      card9_thought: "保存句子，或许就是在给自己留那个角落。",
+      card9_date: "7月8日",
+      card10_quote: "最难写的不是悲剧，而是那种说不出口的、日常的迟疑。",
+      card10_attr: "单读 · 小说节选",
+      card10_thought: "有些句子要反复读，才听得见背后的沉默。",
+      card10_date: "7月6日",
+      card11_quote: "走过很多地方，看过很多云，最后留下的，往往是几句别人写下的话。",
+      card11_attr: "利器 · 访谈",
+      card11_thought: "数量有时候是专注的反义词——所以才要摘下来。",
+      card11_date: "7月3日",
+      card12_quote: "好的设计不会要求你注意它，它只是让你慢慢信任它。",
+      card12_attr: "得到 · 设计专栏",
+      card12_thought: "安静，原来也是一种设计目标。",
+      card12_date: "6月30日",
+      card13_quote: "简洁不是少，而是没有一个多余的部分需要被解释。",
+      card13_attr: "少数派 · 工具测评",
+      card13_thought: "每删掉一个功能，就少一个要让人学会的东西。",
+      card13_date: "6月27日",
+      card14_quote: "教育不是往桶里灌水，而是点燃一把火。",
+      card14_attr: "看理想 · 教育评论",
+      card14_thought: "摘录一句话只是星火，写下想法才算点着。",
+      card14_date: "6月24日",
+      quiet_kicker: "细节",
+      quiet_title: "为安静的思考而设计。",
+      quiet_local: "本地优先",
+      quiet_local_desc: "你的卡片只存在于浏览器本地，不在我们的服务器上。AI 和同步凭证也只保存在本地存储里。你的想法，除非你愿意，否则不会离开。",
+      quiet_dark: "追随夜晚",
+      quiet_dark_desc: "暗色模式跟随系统，也可以手动切换。暗色主题是温暖的墨色，不是冷黑——为深夜阅读而设。",
+      quiet_sync: "按需同步",
+      quiet_sync_desc: "把卡片发送到 Notion 数据库，或通过 WebDAV 备份到坚果云。可选、安静、默认关闭。",
+      quiet_lang: "会说三种语言",
+      quiet_lang_desc: "中文、English、Français——因为好句子以各种语言被写下。",
+      closing_title: "有些想法，值得被留下。",
+      closing_tagline: "安静收集那些重要的事。",
+      footer_copy: "© 2026 IceyOrange · MIT 协议",
+      footer_feedback: "反馈"
+    }
+  };
+
+  // Demo entries cycle through quotes and thoughts from the wall so the
+  // live preview never feels like a single repeating trick.
+  var demoItems = {
+    en: [
+      { pre: "Some sentences feel disposable. ", hl: "The good ones stay with you.", quote: "The good ones stay with you.", attr: "a reminder to keep what matters", thought: "keep the sentence, lose the folder." },
+      { pre: "Reading can be a lonely act. ", hl: "We read to know we're not alone.", quote: "We read to know we're not alone.", attr: "William Nicholson", thought: "maybe that's why I save sentences — they're company." },
+      { pre: "Before building anything, start here. ", hl: "Make something people want.", quote: "Make something people want.", attr: "Paul Graham", thought: "and want to keep. retention is love measured over time." },
+      { pre: "Rest is not the opposite of work. ", hl: "Almost everything will work again if you unplug it for a few minutes, including you.", quote: "Almost everything will work again if you unplug it for a few minutes, including you.", attr: "Anne Lamott", thought: "note to self: unplug more." },
+      { pre: "Edit until it stops improving. ", hl: "Perfection is achieved not when there is nothing more to add, but when there is nothing left to take away.", quote: "Perfection is achieved not when there is nothing more to add, but when there is nothing left to take away.", attr: "Antoine de Saint-Exupéry", thought: "applies to code, to essays, and to this very page." }
+    ],
+    zh: [
+      { pre: "大多数高亮最终都死在了某个文件夹里。", hl: "而好的句子会留下来。", quote: "而好的句子会留下来。", attr: "留下值得留下的", thought: "留下句子，而不是文件夹。" },
+      { pre: "阅读常常是一场孤独的旅行。", hl: "我们阅读，方知自己并不孤单。", quote: "我们阅读，方知自己并不孤单。", attr: "利器 · 一篇访谈", thought: "也许这就是我保存句子的原因——它们是陪伴。" },
+      { pre: "做产品前，先回到人。", hl: "做一个人们想要，并且愿意一直留着的东西。", quote: "做一个人们想要，并且愿意一直留着的东西。", attr: "少数派 · 产品笔记", thought: "留存是爱意乘以时间。" },
+      { pre: "慢下来不是逃避。", hl: "慢下来不是为了少做事，而是为了不漏掉看得见的东西。", quote: "慢下来不是为了少做事，而是为了不漏掉看得见的东西。", attr: "单读 · 散文", thought: "原来效率的反义词不是慢，是错过。" },
+      { pre: "删减到最后才是完成。", hl: "完美不是再没有什么可以加，而是再没有什么可以去掉。", quote: "完美不是再没有什么可以加，而是再没有什么可以去掉。", attr: "得到 · 心智专栏", thought: "这句话适用于代码、文章，也适用于这整个页面。" }
+    ]
+  };
+
+  // Will be wired to the demo loop further down
+  var demoRestart = function () {};
+
+  // ── i18n helpers ────────────────────────────────
+  function applyLang(lang) {
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      var key = el.getAttribute("data-i18n");
+      var text = i18n[lang][key];
+      if (text === undefined) return;
+      var attr = el.getAttribute("data-i18n-attr");
+      if (attr) {
+        el.setAttribute(attr, text);
+      } else if (el.hasAttribute("data-i18n-html")) {
+        el.innerHTML = text;
+      } else {
+        el.textContent = text;
+      }
+    });
+    document.querySelectorAll(".lang-btn").forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-set-lang") === lang);
+    });
+    try {
+      localStorage.setItem("glean-site-lang", lang);
+      var url = new URL(window.location.href);
+      url.searchParams.set("lang", lang);
+      window.history.replaceState(null, "", url.toString());
+    } catch (e) {}
+    demoRestart();
+  }
+
+  function getInitialLang() {
+    var params = new URLSearchParams(window.location.search);
+    var p = params.get("lang");
+    if (p === "en" || p === "zh") return p;
+    try {
+      var s = localStorage.getItem("glean-site-lang");
+      if (s === "en" || s === "zh") return s;
+    } catch (e) {}
+    var nav = navigator.language || navigator.userLanguage || "en";
+    return nav.toLowerCase().startsWith("zh") ? "zh" : "en";
+  }
+
+  document.querySelectorAll(".lang-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      applyLang(btn.getAttribute("data-set-lang"));
+    });
+  });
+
+  applyLang(getInitialLang());
+
+  // ── Theme: manual toggle, falls back to system ──
+  (function () {
+    var root = document.documentElement;
+    var stored = null;
+    try { stored = localStorage.getItem("glean-site-theme"); } catch (e) {}
+    if (stored === "dark" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+      root.classList.add("dark");
+    }
+    document.getElementById("themeToggle").addEventListener("click", function () {
+      root.classList.toggle("dark");
+      try { localStorage.setItem("glean-site-theme", root.classList.contains("dark") ? "dark" : "light"); } catch (e) {}
+    });
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function (e) {
+      try { if (!localStorage.getItem("glean-site-theme")) root.classList.toggle("dark", e.matches); } catch (err) {}
+    });
+  })();
+
+  // ── Hero mark gently follows the cursor ──
+  (function () {
+    if (!window.matchMedia("(hover: hover)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var wrap = document.getElementById("heroMarkWrap");
+    var hero = document.querySelector(".hero");
+    if (!wrap || !hero) return;
+    var tx = 0, ty = 0, rx = 0, ry = 0, raf = null;
+    function tick() {
+      rx += (tx - rx) * 0.07;
+      ry += (ty - ry) * 0.07;
+      wrap.style.transform =
+        "translate(" + rx.toFixed(2) + "px," + ry.toFixed(2) + "px) rotate(" + (rx * 0.18).toFixed(2) + "deg)";
+      if (Math.abs(tx - rx) > 0.05 || Math.abs(ty - ry) > 0.05) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        raf = null;
+      }
+    }
+    hero.addEventListener("mousemove", function (e) {
+      var r = wrap.getBoundingClientRect();
+      var cx = r.left + r.width / 2;
+      var cy = r.top + r.height / 2;
+      tx = Math.max(-10, Math.min(10, (e.clientX - cx) / 26));
+      ty = Math.max(-8, Math.min(8, (e.clientY - cy) / 32));
+      if (!raf) raf = requestAnimationFrame(tick);
+    });
+    hero.addEventListener("mouseleave", function () {
+      tx = 0; ty = 0;
+      if (!raf) raf = requestAnimationFrame(tick);
+    });
+  })();
+
+  // ── Reveal on scroll ──
+  (function () {
+    var els = document.querySelectorAll("[data-reveal]");
+    if (!("IntersectionObserver" in window)) {
+      els.forEach(function (el) { el.classList.add("in"); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in");
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+
+  // ── Live demo: highlight → thought → saved, on a loop ──
+  (function () {
+    var hl = document.getElementById("demoHl");
+    var mark = document.getElementById("demoMark");
+    var card = document.getElementById("demoCard");
+    var cardQuote = document.getElementById("demoCardQuote");
+    var cardAttr = document.getElementById("demoCardAttr");
+    var thoughtText = document.getElementById("demoThoughtText");
+    var saved = document.getElementById("demoSaved");
+    var stage = document.getElementById("demoStage");
+    if (!hl || !mark || !card || !cardQuote || !cardAttr || !thoughtText || !saved || !stage) return;
+
+    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var runToken = 0;
+    var itemIndex = 0;
+
+    function currentLang() {
+      return document.documentElement.lang === "zh-CN" ? "zh" : "en";
+    }
+    function items() {
+      return demoItems[currentLang()] || demoItems.en;
+    }
+    function applyItem(item) {
+      var preEl = stage.querySelector("[data-i18n='demo_pre']");
+      if (preEl) preEl.textContent = item.pre;
+      hl.textContent = item.hl;
+      cardQuote.textContent = item.quote;
+      cardAttr.textContent = "— " + item.attr.replace(/^—\s*/, "");
+    }
+    function finishState() {
+      var item = items()[itemIndex % items().length];
+      applyItem(item);
+      hl.classList.add("on");
+      mark.classList.add("on");
+      card.classList.add("on");
+      saved.classList.add("on");
+      thoughtText.textContent = item.thought;
+    }
+    function wait(ms, token) {
+      return new Promise(function (resolve) {
+        setTimeout(function () { resolve(token === runToken); }, ms);
+      });
+    }
+    async function loop(token) {
+      while (token === runToken) {
+        var list = items();
+        var item = list[itemIndex % list.length];
+        itemIndex++;
+        applyItem(item);
+        hl.classList.remove("on");
+        mark.classList.remove("on");
+        card.classList.remove("on");
+        saved.classList.remove("on");
+        thoughtText.textContent = "";
+        if (!(await wait(700, token))) return;
+        hl.classList.add("on");
+        if (!(await wait(1150, token))) return;
+        mark.classList.add("on");
+        if (!(await wait(650, token))) return;
+        card.classList.add("on");
+        if (!(await wait(500, token))) return;
+        for (var i = 1; i <= item.thought.length; i++) {
+          if (token !== runToken) return;
+          thoughtText.textContent = item.thought.slice(0, i);
+          await new Promise(function (r) { setTimeout(r, 46); });
+        }
+        saved.classList.add("on");
+        if (!(await wait(3000, token))) return;
+      }
+    }
+
+    demoRestart = function () {
+      runToken++;
+      itemIndex = 0;
+      if (reduced) { finishState(); return; }
+      loop(runToken);
+    };
+
+    if (reduced) { finishState(); return; }
+
+    if ("IntersectionObserver" in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          runToken++;
+          itemIndex = 0;
+          if (entry.isIntersecting) loop(runToken);
+        });
+      }, { threshold: 0.3 });
+      io.observe(stage);
+    } else {
+      loop(runToken);
+    }
+  })();
+
+  // ── Wall: source filtering + connections between kindred cards ──
+  (function () {
+    var wall = document.getElementById("wall");
+    var svg = document.getElementById("wallLinks");
+    var cards = Array.prototype.slice.call(wall.querySelectorAll(".card"));
+    var buttons = document.querySelectorAll(".source-btn");
+    var canHover = window.matchMedia("(hover: hover)").matches;
+    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function clearLinks() {
+      wall.classList.remove("hovering");
+      if (!wall.classList.contains("filtering")) {
+        cards.forEach(function (c) { c.classList.remove("match"); });
+      }
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+    }
+
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        buttons.forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        clearLinks();
+        var source = btn.dataset.source;
+        if (source === "all") {
+          wall.classList.remove("filtering");
+          cards.forEach(function (c) { c.classList.remove("match"); });
+          return;
+        }
+        wall.classList.add("filtering");
+        cards.forEach(function (c) {
+          c.classList.toggle("match", c.dataset.source === source);
+        });
+      });
+    });
+
+    window.addEventListener("resize", clearLinks);
+
+    if (!canHover || reduced) return;
+
+    cards.forEach(function (card) {
+      card.addEventListener("mouseenter", function () {
+        if (wall.classList.contains("filtering")) return;
+        var source = card.dataset.source;
+        wall.classList.add("hovering");
+        var matches = cards.filter(function (c) { return c.dataset.source === source; });
+        matches.forEach(function (c) { c.classList.add("match"); });
+
+        var wallRect = wall.getBoundingClientRect();
+        var w = wall.scrollWidth, h = wall.scrollHeight;
+        svg.setAttribute("width", w);
+        svg.setAttribute("height", h);
+        svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+
+        var a = card.getBoundingClientRect();
+        var ax = a.left - wallRect.left + a.width / 2;
+        var ay = a.top - wallRect.top + a.height / 2;
+        matches.forEach(function (other) {
+          if (other === card) return;
+          var b = other.getBoundingClientRect();
+          var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", ax);
+          line.setAttribute("y1", ay);
+          line.setAttribute("x2", b.left - wallRect.left + b.width / 2);
+          line.setAttribute("y2", b.top - wallRect.top + b.height / 2);
+          svg.appendChild(line);
+        });
+      });
+      card.addEventListener("mouseleave", function () {
+        if (wall.classList.contains("filtering")) return;
+        clearLinks();
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>

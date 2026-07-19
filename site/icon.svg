@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Cream tile: keeps the icon visible on dark browser toolbars. -->
+  <rect width="128" height="128" rx="26" fill="#F7F1E4"/>
+  <!-- Plain bookmark in warm ink. -->
+  <path d="M38 34 a8 8 0 0 1 8 -8 h36 a8 8 0 0 1 8 8 v68 L64 86 L38 102 Z" fill="#221E1A"/>
+</svg>
