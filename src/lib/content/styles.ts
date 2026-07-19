@@ -90,6 +90,9 @@ export const STYLES = `
 
   .toast {
     position: fixed;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
     background: var(--gl-bg);
     border: 1px solid var(--gl-border);
     border-radius: 10px;
@@ -98,10 +101,11 @@ export const STYLES = `
     font-size: 13px;
     color: var(--gl-text);
     pointer-events: auto;
+    transition: width .35s cubic-bezier(.4,0,.2,1), height .3s ease, box-shadow .2s ease;
   }
   .toast.toast-enter {
     opacity: 0;
-    transform: scale(.85);
+    transform: scale(.82);
     animation: toastIn .3s cubic-bezier(.34,1.56,.64,1) forwards;
   }
   .toast.toast-out {
@@ -229,7 +233,7 @@ export const STYLES = `
     display: block;
     white-space: pre-wrap;
     word-break: break-word;
-    transition: border-color .4s, background .4s, height .12s ease, width .45s cubic-bezier(.4,0,.2,1);
+    transition: border-color .4s, background .4s, height .12s ease, width .4s cubic-bezier(.34,1.56,.64,1);
   }
   .toast-thought textarea:focus {
     border-color: var(--gl-seal);

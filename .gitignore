@@ -35,3 +35,7 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Vercel deployment metadata
+.vercel
+.superpowers/

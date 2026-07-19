@@ -155,6 +155,36 @@ export default defineContentScript({
       if (old) old.remove();
     }
 
+    // ── Toast geometry helpers ────────────────────────
+
+    const SHORT_WIDTH = 220;
+    const LONG_WIDTH_BASE = 380;
+    const WIDTH_EXPAND_THRESHOLD = 18; // px before edge
+    const WIDTH_CONTRACT_THRESHOLD = 40; // px of headroom before contracting
+
+    function getMaxTextareaWidth() {
+      // viewport margins (8px each side) + toast border + thought-area padding
+      // + flex gap + send button. Keep the short width as a floor.
+      return Math.max(SHORT_WIDTH, window.innerWidth - 72);
+    }
+
+    function clampToastPosition() {
+      if (!toastEl) return;
+      const rect = toastEl.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      let left = parseFloat(toastEl.style.left) || rect.left;
+      let top = parseFloat(toastEl.style.top) || rect.top;
+
+      if (rect.right > vw - 8) left = vw - rect.width - 8;
+      if (rect.bottom > vh - 8) top = vh - rect.height - 8;
+      if (left < 8) left = 8;
+      if (top < 8) top = 8;
+
+      toastEl.style.left = `${left}px`;
+      toastEl.style.top = `${top}px`;
+    }
+
     // ── Trigger icon (click = instant save) ───────────
 
     let triggerEl: HTMLElement | null = null;
@@ -211,7 +241,7 @@ export default defineContentScript({
 
         try {
           const card = await saveCard(lastSaveAttempt);
-          showSavedToast(left, top, card);
+          showSavedToast(triggerEl, left, top, card);
         } catch {
           showErrorToast(left, top, lastSaveAttempt);
         }
@@ -220,7 +250,12 @@ export default defineContentScript({
 
     // ── Saved toast (morphed from trigger) ────────────
 
-    async function showSavedToast(x: number, y: number, card: Card) {
+    async function showSavedToast(
+      trigger: HTMLElement | null,
+      x: number,
+      y: number,
+      card: Card
+    ) {
       if (!shadowRoot) return;
       currentLang = await getLang();
       const cardId = card.id;
@@ -229,26 +264,25 @@ export default defineContentScript({
       // Open the thought editor right after saving so the user can immediately capture their idea.
       const autoThought = true;
 
-      // Remove trigger
-      if (triggerEl) triggerEl.remove();
+      // Crossfade the trigger into the toast so the popup feels continuous.
+      if (trigger && trigger === triggerEl) {
+        trigger.style.transition = "opacity .15s ease, transform .15s ease";
+        trigger.style.opacity = "0";
+        trigger.style.transform = "scale(.85)";
+        setTimeout(() => trigger.remove(), 160);
+      }
       triggerEl = null;
 
       toastEl = document.createElement("div");
       toastEl.className = "toast toast-enter";
       toastEl.setAttribute("role", "status");
-
-      // Clamp to viewport after rendering
       toastEl.style.left = `${x}px`;
       toastEl.style.top = `${y}px`;
+
+      // Clamp to viewport after the first paint so the enter animation starts
+      // from a visible position.
       requestAnimationFrame(() => {
-        if (!toastEl) return;
-        const rect = toastEl.getBoundingClientRect();
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        if (rect.right > vw - 8) toastEl.style.left = `${vw - rect.width - 8}px`;
-        if (rect.bottom > vh - 8) toastEl.style.top = `${vh - rect.height - 8}px`;
-        if (parseFloat(toastEl.style.left) < 8) toastEl.style.left = "8px";
-        if (parseFloat(toastEl.style.top) < 8) toastEl.style.top = "8px";
+        requestAnimationFrame(() => clampToastPosition());
       });
 
       let showThought = autoThought;
@@ -371,6 +405,14 @@ export default defineContentScript({
               const thoughtArea = toastEl.querySelector(".toast-thought") as HTMLElement | null;
               const label = toastEl.querySelector(".toast-label") as HTMLElement | null;
 
+              // Freeze the toast at its current size so the inner thought area
+              // can collapse without the whole box snapping smaller first.
+              const startRect = toastEl.getBoundingClientRect();
+              toastEl.style.width = `${startRect.width}px`;
+              toastEl.style.height = `${startRect.height}px`;
+              toastEl.style.transition = "none";
+              toastEl.style.overflow = "hidden";
+
               if (thoughtArea) {
                 thoughtArea.style.maxHeight = thoughtArea.scrollHeight + "px";
                 thoughtArea.offsetHeight;
@@ -391,8 +433,42 @@ export default defineContentScript({
                   label.style.opacity = "1";
                 }, 150);
               }
+
+              // Once the thought area has collapsed, measure the compact bar
+              // size and animate the toast itself down to it.
+              setTimeout(() => {
+                if (!toastEl) return;
+                toastEl.style.width = "";
+                toastEl.style.height = "";
+                const compactRect = toastEl.getBoundingClientRect();
+
+                requestAnimationFrame(() => {
+                  if (!toastEl) return;
+                  toastEl.style.width = `${startRect.width}px`;
+                  toastEl.style.height = `${startRect.height}px`;
+                  toastEl.style.transition = "none";
+                  toastEl.offsetHeight; // force reflow
+
+                  requestAnimationFrame(() => {
+                    if (!toastEl) return;
+                    toastEl.style.transition = "width .35s cubic-bezier(.4,0,.2,1), height .3s ease";
+                    toastEl.style.width = `${compactRect.width}px`;
+                    toastEl.style.height = `${compactRect.height}px`;
+
+                    const onDone = (e: TransitionEvent) => {
+                      if (e.propertyName !== "width" || !toastEl) return;
+                      toastEl.style.width = "";
+                      toastEl.style.height = "";
+                      toastEl.style.overflow = "";
+                      toastEl.style.transition = "";
+                      toastEl.removeEventListener("transitionend", onDone);
+                    };
+                    toastEl.addEventListener("transitionend", onDone);
+                  });
+                });
+              }, 280);
             }
-            setTimeout(dismiss, 4000);
+            setTimeout(dismiss, 4500);
           } catch {
             dismiss();
           }
@@ -486,7 +562,10 @@ export default defineContentScript({
         shadowRoot!.appendChild(measure);
 
         // Set explicit initial width so CSS transition has a starting value
-        if (textarea) textarea.style.width = "220px";
+        if (textarea) {
+          textarea.style.width = `${SHORT_WIDTH}px`;
+          textarea.style.maxWidth = `${getMaxTextareaWidth()}px`;
+        }
 
         let widthExpanded = false;
         let widthContractTimer: ReturnType<typeof setTimeout> | null = null;
@@ -494,25 +573,53 @@ export default defineContentScript({
           if (!textarea) return;
 
           const val = textarea.value;
-          if (val) {
-            measure.textContent = val;
-            const textW = measure.offsetWidth + 2;
+          const maxW = getMaxTextareaWidth();
+          const longW = Math.min(LONG_WIDTH_BASE, maxW);
+          textarea.style.maxWidth = `${maxW}px`;
 
-            // Expand once when text approaches min width
-            if (!widthExpanded && textW >= 210) {
+          // Measure the longest line so multi-line text only expands when a
+          // single line is about to hit the short width, not because the total
+          // character count grew.
+          const lines = val.split("\n");
+          let longestLineW = 0;
+          for (const line of lines) {
+            measure.textContent = line || " ";
+            longestLineW = Math.max(longestLineW, measure.offsetWidth + 2);
+          }
+
+          const currentW = textarea.getBoundingClientRect().width;
+
+          if (val.trim()) {
+            if (!widthExpanded && longestLineW >= currentW - WIDTH_EXPAND_THRESHOLD) {
               widthExpanded = true;
               if (widthContractTimer) { clearTimeout(widthContractTimer); widthContractTimer = null; }
-              textarea.style.width = "380px";
+              textarea.style.width = `${longW}px`;
+              // Ensure the toast doesn't spill outside the viewport after it grows.
+              setTimeout(clampToastPosition, 50);
             }
           } else if (widthExpanded) {
-            // Contract back after brief delay (avoid jitter while typing)
-            if (!widthContractTimer) {
-              widthContractTimer = setTimeout(() => {
-                widthContractTimer = null;
-                if (!textarea || textarea.value) return;
-                widthExpanded = false;
-                textarea.style.width = "220px";
-              }, 400);
+            // Contract back once there is comfortable headroom (avoid jitter while typing)
+            if (longestLineW < SHORT_WIDTH - WIDTH_CONTRACT_THRESHOLD || !val.trim()) {
+              if (!widthContractTimer) {
+                widthContractTimer = setTimeout(() => {
+                  widthContractTimer = null;
+                  if (!textarea) return;
+                  const latestVal = textarea.value;
+                  const latestLines = latestVal.split("\n");
+                  let latestLongest = 0;
+                  for (const line of latestLines) {
+                    measure.textContent = line || " ";
+                    latestLongest = Math.max(latestLongest, measure.offsetWidth + 2);
+                  }
+                  if (latestVal.trim() && latestLongest >= SHORT_WIDTH - WIDTH_CONTRACT_THRESHOLD) return;
+                  widthExpanded = false;
+                  textarea.style.width = `${SHORT_WIDTH}px`;
+                  setTimeout(clampToastPosition, 50);
+                }, 400);
+              }
+            } else if (widthContractTimer) {
+              clearTimeout(widthContractTimer);
+              widthContractTimer = null;
             }
           }
 
@@ -620,7 +727,7 @@ export default defineContentScript({
           e.stopPropagation();
           try {
             const card = await saveCard(attempt);
-            showSavedToast(x, y, card);
+            showSavedToast(null, x, y, card);
           } catch {
             // Stay on the error toast.
           }
@@ -688,6 +795,22 @@ export default defineContentScript({
 
     document.addEventListener("mousedown", (e) => dismissIfOutside(e.target));
     document.addEventListener("touchstart", (e) => dismissIfOutside(e.target), { passive: true });
+
+    // Keep the toast inside the viewport when the window is resized and
+    // prevent the textarea from growing wider than the new viewport.
+    window.addEventListener("resize", () => {
+      clampToastPosition();
+      const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
+      if (!ta) return;
+      const maxW = getMaxTextareaWidth();
+      const longW = Math.min(LONG_WIDTH_BASE, maxW);
+      ta.style.maxWidth = `${maxW}px`;
+      const currentW = parseFloat(ta.style.width);
+      if (currentW > longW) {
+        ta.style.width = `${Math.max(SHORT_WIDTH, longW)}px`;
+        setTimeout(clampToastPosition, 50);
+      }
+    });
   },
 });
 
