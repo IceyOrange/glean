@@ -67,7 +67,7 @@ export const CardItem = memo(function CardItem({
     setIsClamped(quoteClamped || thoughtClamped);
   }, [expanded, card.content, card.thought, query]);
 
-  const clickable = !selectionMode && (expanded || isClamped);
+  const clickable = !selectionMode && (expanded || isClamped || !card.thought);
 
   return (
     <article
@@ -85,7 +85,7 @@ export const CardItem = memo(function CardItem({
               onToggleSelection(card.id);
             }}
             className={`shrink-0 mt-0.5 p-0.5 rounded transition-colors ${
-              selected ? "text-seal" : "text-ink-300 hover:text-ink-500"
+              selected ? "text-seal" : "text-ink-500 hover:text-ink-700"
             }`}
             title={selected ? tr("deselectAll") : tr("selectAll")}
           >
@@ -126,6 +126,20 @@ export const CardItem = memo(function CardItem({
                 {highlight(card.thought, query)}
               </p>
             </div>
+          )}
+
+          {/* Add-thought affordance for short, unexpanded cards */}
+          {!expanded && !card.thought && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartEditingThought(card.id);
+              }}
+              className="mt-2 flex items-center gap-1.5 text-xs text-ink-500 hover:text-seal transition-colors py-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+            >
+              <PenLine size={11} />
+              {tr("addThought")}
+            </button>
           )}
 
           {/* Thought — expanded (margin-note style) */}
@@ -210,7 +224,7 @@ export const CardItem = memo(function CardItem({
                     e.stopPropagation();
                     onStartEditingThought(card.id);
                   }}
-                  className="flex items-center gap-1.5 text-xs text-ink-300 hover:text-seal transition-colors py-1"
+                  className="flex items-center gap-1.5 text-xs text-ink-500 hover:text-seal transition-colors py-1"
                 >
                   <PenLine size={11} />
                   {tr("addThought")}
@@ -221,7 +235,7 @@ export const CardItem = memo(function CardItem({
 
           {/* Source + meta */}
           <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0 text-[11px] text-ink-400">
+            <div className="flex items-center gap-2 min-w-0 text-[11px] text-ink-500">
               {card.source.favicon && (
                 <img
                   src={card.source.favicon}
@@ -266,7 +280,7 @@ export const CardItem = memo(function CardItem({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[11px] text-ink-300 tabular-nums">
+              <span className="text-[11px] text-ink-500 tabular-nums">
                 {formatRelativeDate(card.createdAt, lang)}
               </span>
               <button

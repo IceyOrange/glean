@@ -41,7 +41,7 @@ export function SelectionBar({
           >
             {filteredCount > 0 && allFilteredSelected ? deselectAllLabel : selectAllLabel}
           </button>
-          <span className="text-xs text-ink-400">
+          <span className="text-xs text-ink-500">
             {selectedCountLabel}
           </span>
         </div>
@@ -69,7 +69,7 @@ export function SelectionBar({
           </button>
           <button
             onClick={onCancel}
-            className="px-2.5 py-1.5 text-xs text-ink-400 hover:text-ink-600 hover:bg-line-soft rounded-lg transition-colors"
+            className="px-2.5 py-1.5 text-xs text-ink-500 hover:text-ink-700 hover:bg-line-soft rounded-lg transition-colors"
           >
             {cancelLabel}
           </button>

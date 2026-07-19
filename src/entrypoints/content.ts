@@ -12,6 +12,7 @@ export default defineContentScript({
     let host: HTMLElement | null = null;
     let shadowRoot: ShadowRoot | null = null;
     let currentLang: Lang = "zh";
+    let lastSaveAttempt: { content: string; source: CitationSource } | null = null;
     const tr = (key: string) => t(key, currentLang);
     // Keep language in sync with storage
     getLang().then((l) => { currentLang = l; });
@@ -200,6 +201,8 @@ export default defineContentScript({
         const text = sel.toString().trim();
         if (!text) return;
 
+        lastSaveAttempt = { content: text, source: extractCitationSource() };
+
         // Show saving state on trigger
         if (triggerEl) {
           triggerEl.innerHTML = `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
@@ -207,14 +210,10 @@ export default defineContentScript({
         }
 
         try {
-          const card = await saveCard({
-            content: text,
-            thought: undefined,
-            source: extractCitationSource(),
-          });
+          const card = await saveCard(lastSaveAttempt);
           showSavedToast(left, top, card);
         } catch {
-          showErrorToast(left, top);
+          showErrorToast(left, top, lastSaveAttempt);
         }
       });
     }
@@ -227,8 +226,8 @@ export default defineContentScript({
       const cardId = card.id;
       activeToastCardId = cardId;
 
-      // Always open the thought editor right after saving
-      const autoThought = true;
+      // Keep the save quiet by default; user can click the note button to add a thought.
+      const autoThought = false;
 
       // Remove trigger
       if (triggerEl) triggerEl.remove();
@@ -573,7 +572,11 @@ export default defineContentScript({
       }
     }
 
-    async function showErrorToast(x: number, y: number) {
+    async function showErrorToast(
+      x: number,
+      y: number,
+      attempt: { content: string; source: CitationSource } | null = null
+    ) {
       if (!shadowRoot) return;
       currentLang = await getLang();
       if (triggerEl) triggerEl.remove();
@@ -584,10 +587,14 @@ export default defineContentScript({
       toastEl.setAttribute("role", "alert");
       toastEl.style.left = `${x}px`;
       toastEl.style.top = `${y}px`;
+      const retryButton = attempt
+        ? `<button class="toast-retry" id="glean-retry">${tr("askRetry")}</button>`
+        : "";
       toastEl.innerHTML = `
         <div class="toast-bar">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
           <span class="toast-label error">${tr("failed")}</span>
+          ${retryButton}
         </div>
       `;
       // Viewport clamping
@@ -607,6 +614,18 @@ export default defineContentScript({
       toastEl.addEventListener("mouseleave", () => { errorTimer = setTimeout(destroyAll, 1500); });
       toastEl.addEventListener("mousedown", (e) => e.stopPropagation());
       shadowRoot.appendChild(toastEl);
+
+      if (attempt) {
+        shadowRoot.getElementById("glean-retry")?.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          try {
+            const card = await saveCard(attempt);
+            showSavedToast(x, y, card);
+          } catch {
+            // Stay on the error toast.
+          }
+        });
+      }
     }
 
     // ── Helpers ────────────────────────────────────────
@@ -621,15 +640,10 @@ export default defineContentScript({
 
     // ── Events ────────────────────────────────────────
 
-    document.addEventListener("mouseup", (e) => {
-      // Skip events from form elements. Use composedPath() so we can see the
-      // real target even when the event originated inside our Shadow DOM.
-      const path = e.composedPath();
-      const realTarget = (path[0] ?? e.target) as HTMLElement;
-      if (realTarget.closest("input, textarea, select, [contenteditable]")) return;
+    function handleSelectionEnd(clientX: number, clientY: number, path: EventTarget[]) {
+      const realTarget = (path[0] ?? null) as HTMLElement | null;
+      if (realTarget?.closest("input, textarea, select, [contenteditable]")) return;
 
-      const mouseX = e.clientX;
-      const mouseY = e.clientY;
       const insideToast = !!toastEl && path.some((el) => el === toastEl);
 
       setTimeout(() => {
@@ -649,16 +663,31 @@ export default defineContentScript({
           return;
         }
 
-        showTrigger(sel, mouseX, mouseY);
+        showTrigger(sel, clientX, clientY);
       }, 10);
+    }
+
+    document.addEventListener("mouseup", (e) => {
+      handleSelectionEnd(e.clientX, e.clientY, e.composedPath());
     });
 
-    document.addEventListener("mousedown", (e) => {
+    document.addEventListener("touchend", (e) => {
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      // Prevent the synthetic mouseup from double-triggering on the same selection.
+      const path = e.composedPath();
+      handleSelectionEnd(touch.clientX, touch.clientY, path);
+    });
+
+    function dismissIfOutside(target: EventTarget | null) {
       if (!host) return;
-      if (host.contains(e.target as Node)) return;
+      if (host.contains(target as Node)) return;
       flushPendingThought();
       destroyAll();
-    });
+    }
+
+    document.addEventListener("mousedown", (e) => dismissIfOutside(e.target));
+    document.addEventListener("touchstart", (e) => dismissIfOutside(e.target), { passive: true });
   },
 });
 

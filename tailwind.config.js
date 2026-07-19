@@ -12,7 +12,10 @@ export default {
         surface: "oklch(var(--surface) / <alpha-value>)",
         ink: {
           900: "oklch(var(--ink-900) / <alpha-value>)",
+          800: "oklch(var(--ink-800) / <alpha-value>)",
+          700: "oklch(var(--ink-700) / <alpha-value>)",
           600: "oklch(var(--ink-600) / <alpha-value>)",
+          500: "oklch(var(--ink-500) / <alpha-value>)",
           400: "oklch(var(--ink-400) / <alpha-value>)",
           300: "oklch(var(--ink-300) / <alpha-value>)",
         },

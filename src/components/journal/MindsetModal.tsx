@@ -62,7 +62,7 @@ export function MindsetModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 p-4"
       onClick={onClose}
     >
       <div
@@ -195,7 +195,7 @@ function Section({
     <div>
       <div className="flex items-center gap-1.5 mb-2">
         {icon}
-        <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400">
+        <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-ink-500">
           {label}
         </span>
       </div>

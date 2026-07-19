@@ -117,7 +117,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
         </div>
       </div>
 
-      <p className="text-[11px] text-ink-400 leading-relaxed">
+      <p className="text-[11px] text-ink-500 leading-relaxed">
         {tr(meta.descriptionKey)}
       </p>
 
@@ -234,7 +234,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
       )}
 
       {!result && config?.lastSyncAt && !config.lastError && (
-        <p className="text-[11px] text-ink-400">
+        <p className="text-[11px] text-ink-500">
           {tr("syncLastSuccess", { time: formatTime(config.lastSyncAt, tr) })}
         </p>
       )}

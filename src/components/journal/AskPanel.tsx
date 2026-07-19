@@ -94,7 +94,7 @@ export function AskPanel({
         className="max-h-80 overflow-y-auto space-y-4 mb-3 pr-1"
       >
         {exchanges.length === 0 && !loading && !error && (
-          <p className="text-[12px] text-ink-400 leading-relaxed py-2">
+          <p className="text-[12px] text-ink-500 leading-relaxed py-2">
             {emptyHint}
           </p>
         )}
@@ -110,7 +110,7 @@ export function AskPanel({
               </p>
             </div>
             <div className="flex items-start gap-2">
-              <span className="shrink-0 text-[10px] font-semibold text-ink-400 mt-0.5">
+              <span className="shrink-0 text-[10px] font-semibold text-ink-500 mt-0.5">
                 A
               </span>
               <p className="text-[13px] text-ink-600 leading-relaxed whitespace-pre-wrap">

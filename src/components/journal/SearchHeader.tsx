@@ -80,7 +80,7 @@ export function SearchHeader({
           <h1 className="font-quote text-[20px] font-semibold tracking-tight text-ink-900">
             {title}
           </h1>
-          <span className="font-quote text-[13px] text-ink-300 tabular-nums shrink-0">
+          <span className="font-quote text-[13px] text-ink-500 tabular-nums shrink-0">
             {cardCountLabel}
           </span>
         </div>

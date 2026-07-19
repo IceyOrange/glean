@@ -9,11 +9,11 @@ export function EmptyState({ query, noMatch, noCards, emptyDesc }: EmptyStatePro
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
       <div className="font-quote italic text-[44px] leading-none text-seal/30 mb-4 select-none">“</div>
-      <p className="text-sm text-ink-400">
+      <p className="text-sm text-ink-600">
         {query ? noMatch : noCards}
       </p>
       {!query && (
-        <p className="text-xs text-ink-300 mt-2 max-w-xs leading-relaxed">
+        <p className="text-xs text-ink-500 mt-2 max-w-xs leading-relaxed">
           {emptyDesc}
         </p>
       )}

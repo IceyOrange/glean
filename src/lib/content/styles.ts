@@ -135,6 +135,21 @@ export const STYLES = `
   .toast-label.error {
     color: var(--gl-error);
   }
+  .toast-retry {
+    margin-left: 4px;
+    padding: 2px 6px;
+    font-size: 12px;
+    color: var(--gl-error);
+    background: transparent;
+    border: 1px solid var(--gl-border);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .toast-retry:hover {
+    background: var(--gl-bg-hover);
+    border-color: var(--gl-border-strong);
+  }
 
   .toast-sep {
     width: 1px;

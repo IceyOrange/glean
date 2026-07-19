@@ -5,8 +5,7 @@ import { BookOpen, PenLine, Settings, ChevronLeft } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import { getLang, setLang, t, type Lang } from "@/lib/i18n";
 import { siteColor } from "@/lib/ui";
-import { LanguageControl, ThemeControl, AIConfigForm } from "@/components/AISettings";
-import { SyncSettings } from "@/components/SyncSettings";
+import { SettingsPanel } from "@/components/SettingsPanel";
 
 const RECENT_COUNT = 4;
 
@@ -89,7 +88,7 @@ export default function App() {
               {tr("title")}
             </h1>
             {stats.total > 0 && (
-              <span className="font-quote text-[13px] text-ink-300 tabular-nums">
+              <span className="font-quote text-[13px] text-ink-500 tabular-nums">
                 {stats.total}
               </span>
             )}
@@ -144,7 +143,7 @@ export default function App() {
               />
             </div>
             {stats.withThoughts > 0 && (
-              <p className="mt-2 text-right text-[10px] text-ink-300 tabular-nums">
+              <p className="mt-2 text-right text-[10px] text-ink-500 tabular-nums">
                 {stats.avgThoughtLen} {tr("avgLenUnit")}
               </p>
             )}
@@ -208,7 +207,7 @@ export default function App() {
                       {site}
                     </span>
                     <span className="text-[11px] text-ink-300">·</span>
-                    <span className="text-[11px] text-ink-400">
+                    <span className="text-[11px] text-ink-500">
                       {formatRelativeDate(card.createdAt, lang)}
                     </span>
                   </div>
@@ -220,7 +219,7 @@ export default function App() {
           {stats.total > RECENT_COUNT && (
             <button
               onClick={() => openHistory()}
-              className="mt-1 w-full text-center text-[12px] text-ink-400 hover:text-seal py-2 border-t border-line-soft transition-colors"
+              className="mt-1 w-full text-center text-[12px] text-ink-500 hover:text-seal py-2 border-t border-line-soft transition-colors"
             >
               {tr("viewAll", { count: stats.total })}
             </button>
@@ -256,17 +255,6 @@ export default function App() {
 
 /* ── Settings View ────────────────────────── */
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 mb-2">
-      <span className="text-[10px] font-medium text-ink-400 uppercase tracking-[0.12em] shrink-0">
-        {children}
-      </span>
-      <span className="flex-1 h-px bg-line-soft" />
-    </div>
-  );
-}
-
 function SettingsView({
   lang,
   tr,
@@ -291,35 +279,13 @@ function SettingsView({
         <h1 className="font-quote text-[15px] font-semibold text-ink-900">{tr("settings")}</h1>
       </div>
 
-      <div className="px-5 py-4 space-y-5">
-        {/* ── Language ─────────────────── */}
-        <section>
-          <SectionLabel>{tr("langLabel")}</SectionLabel>
-          <LanguageControl lang={lang} onSetLang={onSetLang} />
-        </section>
-
-        {/* ── Appearance ───────────────── */}
-        <section>
-          <SectionLabel>{tr("appearanceSection")}</SectionLabel>
-          <ThemeControl tr={tr} />
-        </section>
-
-        {/* ── AI Provider ──────────────── */}
-        <section>
-          <SectionLabel>{tr("aiProvider")}</SectionLabel>
-          <AIConfigForm tr={tr} framed />
-        </section>
-
-        {/* ── Cloud Sync ──────────────── */}
-        <section>
-          <SectionLabel>{tr("cloudSync")}</SectionLabel>
-          <SyncSettings tr={tr} />
-        </section>
+      <div className="px-5 py-4">
+        <SettingsPanel lang={lang} tr={tr} onSetLang={onSetLang} />
       </div>
 
       {/* Footer */}
       <div className="px-5 py-3 border-t border-line-soft">
-        <p className="font-quote italic text-[11px] text-ink-300 text-center">Glean</p>
+        <p className="font-quote italic text-[11px] text-ink-400 text-center">Glean</p>
       </div>
     </div>
   );

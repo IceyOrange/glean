@@ -16,7 +16,13 @@ export default defineBackground(() => {
   // Automatic cloud sync when the user has enabled it.
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === "glean-sync") {
-      void getCards().then(syncCards);
+      void getCards().then(async (cards) => {
+        try {
+          await syncCards(cards);
+        } catch (err) {
+          console.error("Glean automatic sync failed:", err);
+        }
+      });
     }
   });
 });

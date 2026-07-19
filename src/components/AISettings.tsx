@@ -221,7 +221,7 @@ export function AIConfigForm({
           </button>
         </div>
         {maskedKey && !showApiKey && (
-          <p className="text-[10px] text-ink-300 mt-1 pl-0.5 tabular-nums">{maskedKey}</p>
+          <p className="text-[10px] text-ink-500 mt-1 pl-0.5 tabular-nums">{maskedKey}</p>
         )}
       </div>
 

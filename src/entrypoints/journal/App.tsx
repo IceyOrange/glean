@@ -608,8 +608,6 @@ export default function App() {
           onClose={() => setShowSettings(false)}
           settingsTitle={tr("settingsTitle")}
           settingsDesc={tr("settingsDesc")}
-          langLabel={tr("langLabel")}
-          themeLabel={tr("themeLabel")}
           cancelLabel={tr("cancel")}
         />
       )}
