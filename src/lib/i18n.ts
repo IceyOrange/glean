@@ -85,6 +85,7 @@ const translations: Record<Lang, Record<string, string>> = {
     addThoughtTooltip: "添加感想",
     thoughtPlaceholder: "这让你想到了什么？",
     thoughtSaved: "感想已保存",
+    viewJournal: "灵感库",
     failed: "保存失败",
     // Date groups
     groupToday: "今天",
@@ -249,6 +250,7 @@ const translations: Record<Lang, Record<string, string>> = {
     addThoughtTooltip: "Add a thought",
     thoughtPlaceholder: "What does this remind you of?",
     thoughtSaved: "Thought saved",
+    viewJournal: "Journal",
     failed: "Failed",
     // Date groups
     groupToday: "Today",
@@ -413,6 +415,7 @@ const translations: Record<Lang, Record<string, string>> = {
     addThoughtTooltip: "Ajouter une réflexion",
     thoughtPlaceholder: "À quoi cela vous fait-il penser ?",
     thoughtSaved: "Réflexion enregistrée",
+    viewJournal: "Journal",
     failed: "Échec",
     // Date groups
     groupToday: "Aujourd'hui",

@@ -164,7 +164,8 @@ export const STYLES = `
   }
 
   .toast-undo,
-  .toast-note {
+  .toast-note,
+  .toast-journal {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -185,6 +186,17 @@ export const STYLES = `
     background: var(--gl-bg-hover);
   }
   .toast-undo:active {
+    transform: scale(.92);
+  }
+
+  .toast-journal {
+    color: var(--gl-seal);
+  }
+  .toast-journal:hover {
+    color: var(--gl-text);
+    background: var(--gl-bg-hover);
+  }
+  .toast-journal:active {
     transform: scale(.92);
   }
 
