@@ -226,8 +226,8 @@ export default defineContentScript({
       const cardId = card.id;
       activeToastCardId = cardId;
 
-      // Keep the save quiet by default; user can click the note button to add a thought.
-      const autoThought = false;
+      // Open the thought editor right after saving so the user can immediately capture their idea.
+      const autoThought = true;
 
       // Remove trigger
       if (triggerEl) triggerEl.remove();
