@@ -128,7 +128,7 @@ export const CardItem = memo(function CardItem({
             </div>
           )}
 
-          {/* Add-thought affordance for short, unexpanded cards */}
+          {/* Add-thought affordance for unexpanded cards without a thought */}
           {!expanded && !card.thought && (
             <button
               onClick={(e) => {
@@ -136,7 +136,7 @@ export const CardItem = memo(function CardItem({
                 onExpand(card.id);
                 onStartEditingThought(card.id);
               }}
-              className="mt-2 flex items-center gap-1.5 text-xs text-ink-500 hover:text-seal transition-colors py-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              className="mt-2 flex items-center gap-1.5 text-xs text-ink-500 hover:text-seal transition-colors py-1"
             >
               <PenLine size={11} />
               {tr("addThought")}
