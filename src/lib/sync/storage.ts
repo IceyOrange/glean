@@ -6,7 +6,13 @@ const SYNC_CONFIG_KEY = "glean_sync_config";
 export async function getSyncConfig(): Promise<SavedSyncConfig | null> {
   try {
     const result = await chrome.storage.local.get(SYNC_CONFIG_KEY);
-    return (result[SYNC_CONFIG_KEY] as SavedSyncConfig) ?? null;
+    const raw = result[SYNC_CONFIG_KEY] as SavedSyncConfig | undefined;
+    if (!raw) return null;
+    // Migration: add providerConfigs if missing (pre-existing configs)
+    if (!raw.providerConfigs) {
+      raw.providerConfigs = { [raw.provider]: raw.config };
+    }
+    return raw;
   } catch {
     return null;
   }

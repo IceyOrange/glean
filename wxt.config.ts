@@ -18,7 +18,6 @@ export default defineConfig({
       "<all_urls>",
       "https://api.notion.com/*",
       "https://dav.jianguoyun.com/*",
-      "https://webdav.pcloud.com/*",
       "https://api.deepseek.com/*",
       "https://api.siliconflow.cn/*",
       "https://api.openai.com/*",

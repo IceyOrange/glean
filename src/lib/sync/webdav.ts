@@ -1,5 +1,5 @@
 import { Card } from "@/lib/types";
-import { SyncAdapter, SyncResult, WebDAVConfig } from "./types";
+import { SyncAdapter, SyncResult, PullResult, WebDAVConfig } from "./types";
 
 function normalizeUrl(serverUrl: string, remotePath: string, filename: string): string {
   const base = serverUrl.replace(/\/$/, "");
@@ -128,5 +128,36 @@ export const webdavAdapter: SyncAdapter<WebDAVConfig> = {
     await cleanupOldBackups(dirUrl, config);
 
     return { ok: true, syncedAt: Date.now() };
+  },
+
+  async pull(config) {
+    const latestUrl = normalizeUrl(config.serverUrl, config.remotePath, "glean-backup-latest.json");
+    const res = await davRequest(latestUrl, "GET", config);
+
+    if (res.status === 404) {
+      return { ok: true, cards: [] };
+    }
+    if (!res.ok) {
+      return { ok: false, error: `Failed to download backup: ${res.status} ${await res.text()}` };
+    }
+
+    try {
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        return { ok: false, error: "Remote backup is not a valid array" };
+      }
+      const cards = data.filter(
+        (item: unknown): item is Card =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof (item as Card).id === "string" &&
+          typeof (item as Card).content === "string" &&
+          typeof (item as Card).source === "object" &&
+          typeof (item as Card).createdAt === "number"
+      );
+      return { ok: true, cards };
+    } catch (err) {
+      return { ok: false, error: `Failed to parse backup JSON: ${err instanceof Error ? err.message : String(err)}` };
+    }
   },
 };

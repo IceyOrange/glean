@@ -1,5 +1,9 @@
+import { useState, useEffect } from "react";
+import { ChevronDown } from "lucide-react";
 import { LanguageControl, ThemeControl, AIConfigForm } from "@/components/AISettings";
 import { SyncSettings } from "@/components/SyncSettings";
+import { getAIConfig } from "@/lib/ai";
+import { getSyncConfig, getAdapter } from "@/lib/sync";
 import type { Lang } from "@/lib/i18n";
 
 interface SettingsPanelProps {
@@ -17,9 +21,73 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function SettingsPanel({ lang, tr, onSetLang, onSaved }: SettingsPanelProps) {
+function CollapsibleSection({
+  label,
+  defaultOpen = true,
+  status,
+  children,
+}: {
+  label: string;
+  defaultOpen?: boolean;
+  status?: "configured" | "unconfigured";
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <div className="space-y-5">
+    <section>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 w-full text-left group mb-2"
+      >
+        {status && (
+          <span
+            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+              status === "configured" ? "bg-sage" : "bg-ink-300"
+            }`}
+          />
+        )}
+        <label className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-500 cursor-pointer">
+          {label}
+        </label>
+        <ChevronDown
+          size={12}
+          className={`text-ink-400 transition-transform ${open ? "" : "-rotate-90"}`}
+        />
+      </button>
+      <div
+        className={`transition-all duration-200 ease-in-out ${
+          open ? "max-h-[2000px] opacity-100 overflow-visible" : "max-h-0 opacity-0 overflow-hidden"
+        }`}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
+export function SettingsPanel({ lang, tr, onSetLang, onSaved }: SettingsPanelProps) {
+  const [aiConfigured, setAiConfigured] = useState(false);
+  const [syncConfigured, setSyncConfigured] = useState(false);
+
+  useEffect(() => {
+    getAIConfig().then((c) => setAiConfigured(!!c?.apiKey));
+  }, []);
+
+  useEffect(() => {
+    getSyncConfig().then((c) => {
+      if (!c) { setSyncConfigured(false); return; }
+      try {
+        const adapter = getAdapter(c.provider);
+        setSyncConfigured(adapter.validate(c.config) === null);
+      } catch {
+        setSyncConfigured(false);
+      }
+    });
+  }, []);
+
+  return (
+    <div className="space-y-4">
       <section>
         <SectionLabel>{tr("langLabel")}</SectionLabel>
         <LanguageControl lang={lang} onSetLang={onSetLang} />
@@ -30,15 +98,21 @@ export function SettingsPanel({ lang, tr, onSetLang, onSaved }: SettingsPanelPro
         <ThemeControl tr={tr} />
       </section>
 
-      <section>
-        <SectionLabel>{tr("aiProvider")}</SectionLabel>
+      <CollapsibleSection
+        label={tr("aiProvider")}
+        status={aiConfigured ? "configured" : "unconfigured"}
+        defaultOpen={!aiConfigured}
+      >
         <AIConfigForm tr={tr} onSaved={onSaved} />
-      </section>
+      </CollapsibleSection>
 
-      <section>
-        <SectionLabel>{tr("cloudSync")}</SectionLabel>
+      <CollapsibleSection
+        label={tr("cloudSync")}
+        status={syncConfigured ? "configured" : "unconfigured"}
+        defaultOpen={!syncConfigured}
+      >
         <SyncSettings tr={tr} />
-      </section>
+      </CollapsibleSection>
     </div>
   );
 }

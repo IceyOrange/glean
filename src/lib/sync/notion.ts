@@ -78,6 +78,51 @@ const PROP_THOUGHT = "Thought";
 const PROP_SOURCE = "Source";
 const PROP_CREATED = "Created";
 
+/** Properties Glean expects on the target database. */
+const REQUIRED_PROPERTIES: Record<string, { type: string }> = {
+  [PROP_CONTENT]: { type: "rich_text" },
+  [PROP_THOUGHT]: { type: "rich_text" },
+  [PROP_SOURCE]: { type: "url" },
+  [PROP_CREATED]: { type: "date" },
+  [PROP_GLEAN_ID]: { type: "rich_text" },
+};
+
+interface NotionDatabaseSchema {
+  properties: Record<string, { type: string }>;
+}
+
+/** Ensure the database has all properties Glean needs. Creates any that are missing. */
+async function ensureDatabaseProperties(token: string, databaseId: string): Promise<void> {
+  const db = await notionFetch<NotionDatabaseSchema>(token, `/databases/${databaseId}`);
+  const existing = new Set(Object.keys(db.properties));
+
+  const missing = Object.entries(REQUIRED_PROPERTIES).filter(
+    ([name]) => !existing.has(name)
+  );
+
+  if (missing.length === 0) return;
+
+  const properties: Record<string, object> = {};
+  for (const [name, def] of missing) {
+    switch (def.type) {
+      case "rich_text":
+        properties[name] = { rich_text: {} };
+        break;
+      case "url":
+        properties[name] = { url: {} };
+        break;
+      case "date":
+        properties[name] = { date: {} };
+        break;
+    }
+  }
+
+  await notionFetch(token, `/databases/${databaseId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ properties }),
+  });
+}
+
 async function findGleanDatabase(token: string): Promise<NotionDatabase | null> {
   const data = await notionFetch<NotionSearchResponse>(token, "/search", {
     method: "POST",
@@ -175,6 +220,8 @@ export const notionAdapter: SyncAdapter<NotionConfig> = {
       };
     }
 
+    await ensureDatabaseProperties(config.token, database.id);
+
     const pages = await queryAllPages(config.token, database.id);
     const existingByGleanId = new Map<string, string>();
     for (const page of pages) {
@@ -211,3 +258,26 @@ export const notionAdapter: SyncAdapter<NotionConfig> = {
     return { ok: true, syncedAt: Date.now(), databaseId: database.id };
   },
 };
+
+/** Search all databases accessible to the integration. */
+export async function searchDatabases(
+  token: string
+): Promise<Array<{ id: string; title: string }>> {
+  const data = await notionFetch<{
+    results: Array<{
+      id: string;
+      object: string;
+      title?: Array<{ plain_text: string }>;
+    }>;
+  }>(token, "/search", {
+    method: "POST",
+    body: JSON.stringify({ filter: { property: "object", value: "database" } }),
+  });
+
+  return data.results
+    .filter((r) => r.object === "database")
+    .map((r) => ({
+      id: r.id,
+      title: r.title?.map((t) => t.plain_text).join("") || "Untitled",
+    }));
+}

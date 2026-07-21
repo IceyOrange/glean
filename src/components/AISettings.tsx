@@ -25,7 +25,7 @@ interface AIPreset {
 
 const AI_PRESETS: AIPreset[] = [
   { key: "deepseek", labelKey: "aiProviderDeepseek", baseUrl: "https://api.deepseek.com", model: "deepseek-chat" },
-  { key: "siliconflow", labelKey: "aiProviderSiliconflow", baseUrl: "https://api.siliconflow.cn", model: "deepseek-ai/DeepSeek-V3" },
+  { key: "siliconflow", labelKey: "aiProviderSiliconflow", baseUrl: "https://api.siliconflow.cn", model: "deepseek-ai/DeepSeek-V4-Flash" },
   { key: "openai", labelKey: "aiProviderOpenai", baseUrl: "https://api.openai.com", model: "gpt-4o-mini" },
   { key: "kimi", labelKey: "aiProviderKimi", baseUrl: "https://api.moonshot.cn", model: "moonshot-v1-8k" },
   { key: "zhipu", labelKey: "aiProviderZhipu", baseUrl: "https://open.bigmodel.cn/api/paas", model: "glm-4-flash" },

@@ -6,7 +6,7 @@ import { getSyncConfig, saveSyncConfig } from "./storage";
 export * from "./types";
 export * from "./storage";
 export * from "./registry";
-export { notionAdapter } from "./notion";
+export { notionAdapter, searchDatabases } from "./notion";
 export { webdavAdapter } from "./webdav";
 
 export async function syncCards(cards: Card[]): Promise<SyncResult> {
@@ -34,6 +34,7 @@ export async function syncCards(cards: Card[]): Promise<SyncResult> {
     await saveSyncConfig({
       ...saved,
       config: nextConfig,
+      providerConfigs: { ...saved.providerConfigs, [saved.provider]: nextConfig },
       lastSyncAt: result.ok ? Date.now() : saved.lastSyncAt,
       lastError: result.ok ? undefined : result.error,
     });
