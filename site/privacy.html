@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glean – Privacy Policy</title>
+  <style>
+    :root { --bg: #fafafa; --text: #1a1a1a; --accent: #4a6fa5; --border: #e0e0e0; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #1a1a2e; --text: #e0e0e0; --accent: #7aa2d4; --border: #333; } }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; padding: 2rem 1rem; }
+    .container { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+    h1 span { color: var(--accent); }
+    .updated { color: #888; font-size: 0.85rem; margin-bottom: 2rem; }
+    h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    p, li { margin-bottom: 0.6rem; }
+    ul { padding-left: 1.5rem; }
+    a { color: var(--accent); }
+    .highlight { background: rgba(74,111,165,0.08); border-left: 3px solid var(--accent); padding: 0.8rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><span>Glean</span> Privacy Policy</h1>
+    <p class="updated">Last updated: July 25, 2026</p>
+
+    <p>Glean ("we", "our", "the extension") is committed to protecting your privacy. This policy explains what data Glean collects, how it is used, and your choices.</p>
+
+    <div class="highlight">
+      <strong>Core principle:</strong> Glean stores all your data locally on your device by default. No data is sent anywhere unless you explicitly configure a third-party service.
+    </div>
+
+    <h2>1. Data We Collect</h2>
+    <p>Glean collects and stores the following data <strong>locally on your device</strong> using <code>chrome.storage.local</code>:</p>
+    <ul>
+      <li><strong>Clipped quotes</strong> — Text you select on web pages and choose to save, along with the source page URL and title.</li>
+      <li><strong>Your annotations</strong> — Personal notes you write after clipping a quote.</li>
+      <li><strong>AI-generated insights</strong> — Responses from AI services you configure, cached locally for display.</li>
+      <li><strong>Extension settings</strong> — Your preferences for language, theme, AI provider, and sync configuration.</li>
+      <li><strong>Service credentials</strong> — API keys and tokens for AI providers and cloud sync services, stored locally and encrypted by the browser's storage mechanism.</li>
+    </ul>
+
+    <h2>2. Data We Do NOT Collect</h2>
+    <ul>
+      <li>We do <strong>not</strong> collect personal identification information (name, email, etc.).</li>
+      <li>We do <strong>not</strong> collect browsing history beyond what you explicitly clip.</li>
+      <li>We do <strong>not</strong> use cookies or tracking technologies.</li>
+      <li>We do <strong>not</strong> sell, share, or transmit your data to any third party without your action.</li>
+    </ul>
+
+    <h2>3. Browser Permissions</h2>
+    <p>Glean requests the following browser permissions, each with a specific purpose:</p>
+    <ul>
+      <li><code>storage</code> — To save your clippings, annotations, and settings locally on your device.</li>
+      <li><code>history</code> — To record the source page URL and title when you clip a quote, providing context for your saved cards.</li>
+      <li><code>alarms</code> — To schedule periodic background sync tasks when you enable cloud sync.</li>
+      <li><code>&lt;all_urls&gt;</code> (host permission) — To allow the clipping feature to work on any website you visit. Glean injects a content script to detect text selections and show the clip button. No data is read from pages unless you actively select text and click the clip button.</li>
+    </ul>
+
+    <h2>4. Third-Party Services</h2>
+    <p>Glean can integrate with third-party services <strong>only if you explicitly configure them</strong>. When enabled, data is sent directly from your browser to these services:</p>
+    <ul>
+      <li><strong>AI Providers</strong> (DeepSeek, OpenAI, Anthropic, Moonshot, SiliconFlow, Zhipu/BigModel) — Your clipped quotes and annotations may be sent to generate AI insights. Each provider has their own privacy policy governing how they handle your data.</li>
+      <li><strong>Notion</strong> — If you enable Notion sync, your clippings are sent to your own Notion database via the Notion API. Data is stored in your Notion workspace under your control.</li>
+      <li><strong>WebDAV / Nutstore (坚果云)</strong> — If you enable WebDAV backup, your data is uploaded to your WebDAV server. Nutstore's privacy policy applies to data stored on their service.</li>
+    </ul>
+    <p><strong>Important:</strong> All API calls are made directly from your browser. Glean does not act as an intermediary or proxy for your data.</p>
+
+    <h2>5. Data Storage & Security</h2>
+    <ul>
+      <li>All local data is stored in <code>chrome.storage.local</code>, which is protected by the browser's built-in security model.</li>
+      <li>API keys and tokens are stored locally and never transmitted except to their respective services during authenticated API calls.</li>
+      <li>Glean does not implement its own encryption; it relies on the browser's storage security.</li>
+    </ul>
+
+    <h2>6. Data Deletion</h2>
+    <p>You can delete your data at any time by:</p>
+    <ul>
+      <li>Opening the Glean Journal page and deleting individual cards or using bulk delete.</li>
+      <li>Uninstalling the extension, which removes all locally stored data.</li>
+      <li>Clearing extension data via <code>chrome://settings/content/all</code> → find Glean → Remove.</li>
+    </ul>
+
+    <h2>7. Children's Privacy</h2>
+    <p>Glean does not knowingly collect data from children under 13. The extension is intended for general audiences.</p>
+
+    <h2>8. Changes to This Policy</h2>
+    <p>We may update this privacy policy from time to time. Changes will be reflected on this page with an updated "Last updated" date. Continued use of the extension after changes constitutes acceptance of the revised policy.</p>
+
+    <h2>9. Contact</h2>
+    <p>If you have questions about this privacy policy or Glean's data practices, please contact us:</p>
+    <ul>
+      <li>GitHub Issues: <a href="https://github.com/IceyOrange/glean/issues">https://github.com/IceyOrange/glean/issues</a></li>
+      <li>Website: <a href="https://glean.lovegood.cool">https://glean.lovegood.cool</a></li>
+    </ul>
+
+    <h2>10. Open Source</h2>
+    <p>Glean is open-source software licensed under the MIT License. You can inspect the full source code at <a href="https://github.com/IceyOrange/glean">https://github.com/IceyOrange/glean</a> to verify our data handling practices.</p>
+  </div>
+</body>
+</html>
