@@ -91,6 +91,10 @@ const translations: Record<Lang, Record<string, string>> = {
     groupToday: "今天",
     groupYesterday: "昨天",
     groupEarlier: "更早",
+    // Journal masthead & revisit
+    journalStats: "{{cards}} 条摘记 · {{days}} 天 · {{thoughts}} 条感想",
+    revisitTitle: "今日回读",
+    revisitJump: "在下方找到这条摘记",
     // Undo delete
     deletedToast: "已删除",
     batchDeletedToast: "已删除 {{count}} 条",
@@ -258,6 +262,10 @@ const translations: Record<Lang, Record<string, string>> = {
     groupToday: "Today",
     groupYesterday: "Yesterday",
     groupEarlier: "Earlier",
+    // Journal masthead & revisit
+    journalStats: "{{cards}} cards · {{days}} days · {{thoughts}} thoughts",
+    revisitTitle: "Worth revisiting",
+    revisitJump: "Find this entry below",
     // Undo delete
     deletedToast: "Deleted",
     batchDeletedToast: "{{count}} deleted",
@@ -425,6 +433,10 @@ const translations: Record<Lang, Record<string, string>> = {
     groupToday: "Aujourd'hui",
     groupYesterday: "Hier",
     groupEarlier: "Plus tôt",
+    // Journal masthead & revisit
+    journalStats: "{{cards}} cartes · {{days}} jours · {{thoughts}} réflexions",
+    revisitTitle: "À relire",
+    revisitJump: "Retrouver cette entrée plus bas",
     // Undo delete
     deletedToast: "Supprimée",
     batchDeletedToast: "{{count}} supprimé(s)",

@@ -23,6 +23,20 @@ export function siteColor(site: string): string {
   return PALETTE[Math.abs(hash) % PALETTE.length];
 }
 
+/** Bare hostname for sources without a site name, e.g. "example.com". */
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** Display name for a citation source: site name, heading, or bare hostname. */
+export function siteName(source: { url: string; siteName?: string; heading?: string }): string {
+  return source.siteName || source.heading || hostOf(source.url);
+}
+
 /** Wrap every occurrence of `query` in a <mark> for search highlighting. */
 export function highlight(text: string, query: string): React.ReactNode {
   if (!query) return text;

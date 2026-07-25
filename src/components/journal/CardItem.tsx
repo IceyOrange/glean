@@ -2,15 +2,34 @@ import { memo, useEffect, useRef, useState } from "react";
 import type { Card } from "@/lib/types";
 import type { AskExchange } from "@/lib/ai";
 import { t, type Lang } from "@/lib/i18n";
-import { highlight, siteColor } from "@/lib/ui";
-import { formatRelativeDate, formatPublishedDate } from "@/lib/utils";
+import { highlight, siteColor, siteName } from "@/lib/ui";
+import { formatPublishedDate } from "@/lib/utils";
 import { PenLine, Pencil, MessageCircleQuestion, Trash2, ArrowUpRight, Check, Square } from "lucide-react";
 import { AskPanel } from "./AskPanel";
+
+/**
+ * Reduce a raw page <title> to a useful citation title:
+ * strip a redundant " — Site" style suffix, and drop it entirely when it
+ * just repeats the site or author name (very common in real page titles).
+ */
+function citationTitle(title: string | undefined, site: string, author?: string): string {
+  const t = title?.trim() ?? "";
+  if (!t || t === site) return "";
+  const s = site.trim();
+  let cleaned = t;
+  if (s && cleaned.toLowerCase().endsWith(s.toLowerCase()) && cleaned.length > s.length) {
+    cleaned = cleaned.slice(0, cleaned.length - s.length).replace(/[\s\-–—|·:：_]+$/u, "").trim();
+  }
+  if (!cleaned || cleaned === site || (author && cleaned === author.trim())) return "";
+  return cleaned;
+}
 
 interface CardItemProps {
   card: Card;
   query: string;
   lang: Lang;
+  /** Pre-formatted capture time — HH:mm in the day timeline, full date in search results. */
+  timeLabel: string;
   expanded: boolean;
   selected: boolean;
   selectionMode: boolean;
@@ -33,6 +52,7 @@ export const CardItem = memo(function CardItem({
   card,
   query,
   lang,
+  timeLabel,
   expanded,
   selected,
   selectionMode,
@@ -54,7 +74,8 @@ export const CardItem = memo(function CardItem({
   const quoteRef = useRef<HTMLParagraphElement>(null);
   const thoughtPreviewRef = useRef<HTMLParagraphElement>(null);
   const [isClamped, setIsClamped] = useState(false);
-  const site = card.source.siteName || card.source.heading || card.source.url;
+  const site = siteName(card.source);
+  const titleText = citationTitle(card.source.title, site, card.source.author);
   const tr = (key: string, vars?: Record<string, string | number>) => t(key, lang, vars);
 
   // Only make the card clickable when the quote or thought preview is actually
@@ -72,27 +93,36 @@ export const CardItem = memo(function CardItem({
   return (
     <article
       id={`card-${card.id}`}
-      className={`group border-b border-line-soft py-5 ${
-        selectionMode ? "cursor-pointer" : ""
-      }`}
+      className={`group scroll-mt-24 border-b border-line-soft py-6 transition-colors duration-200 ease-out last:border-b-0 ${
+        selected ? "bg-seal/[0.04]" : ""
+      } ${selectionMode ? "cursor-pointer" : ""}`}
       onClick={selectionMode ? () => onToggleSelection(card.id) : undefined}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2">
         {selectionMode && (
           <button
             onClick={(e) => {
               e.stopPropagation();
               onToggleSelection(card.id);
             }}
-            className={`shrink-0 mt-0.5 p-0.5 rounded transition-colors ${
-              selected ? "text-seal" : "text-ink-500 hover:text-ink-700"
+            className={`mt-1 shrink-0 rounded p-0.5 transition-colors ${
+              selected ? "text-seal" : "text-ink-300 hover:text-ink-600"
             }`}
             title={selected ? tr("deselectAll") : tr("selectAll")}
           >
             {selected ? <Check size={16} /> : <Square size={16} />}
           </button>
         )}
-        <div className="flex-1 min-w-0">
+
+        {/* Entry column — everything aligns to the quote text; the “ mark hangs outside */}
+        <div className="relative min-w-0 flex-1 pl-7">
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-[3px] select-none font-quote text-[28px] leading-[0.8] text-seal/70"
+          >
+            “
+          </span>
+
           {/* Quote */}
           <div
             className={clickable ? "cursor-pointer" : ""}
@@ -107,18 +137,17 @@ export const CardItem = memo(function CardItem({
           >
             <p
               ref={quoteRef}
-              className={`font-quote text-[15px] text-ink-900 leading-[1.8] ${expanded ? "" : "line-clamp-3"}`}
+              className={`font-quote text-[15px] text-ink-900 leading-[1.9] ${expanded ? "" : "line-clamp-3"}`}
             >
-              <span className="text-seal mr-1">“</span>
               {highlight(card.content, query)}
-              <span className="text-ink-300 ml-1">”</span>
+              <span className="text-seal/40 ml-[2px]">”</span>
             </p>
           </div>
 
           {/* Thought preview — collapsed */}
           {!expanded && card.thought && (
-            <div className="mt-2 flex items-start gap-1.5">
-              <PenLine size={11} className="text-ink-300 mt-[3px] shrink-0" />
+            <div className="mt-2.5 flex items-start gap-1.5">
+              <PenLine size={11} className="text-ochre/70 mt-[4px] shrink-0" />
               <p
                 ref={thoughtPreviewRef}
                 className="font-quote italic text-[13px] text-ink-600 leading-relaxed line-clamp-1"
@@ -136,7 +165,7 @@ export const CardItem = memo(function CardItem({
                 onExpand(card.id);
                 onStartEditingThought(card.id);
               }}
-              className="mt-2 flex items-center gap-1.5 text-xs text-ink-500 hover:text-seal transition-colors py-1"
+              className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-400 hover:text-seal transition-colors py-1"
             >
               <PenLine size={11} />
               {tr("addThought")}
@@ -145,67 +174,70 @@ export const CardItem = memo(function CardItem({
 
           {/* Thought — expanded (margin-note style) */}
           {expanded && (
-            <div className="mt-3 ml-0.5 border-l border-line pl-4">
+            <div className="mt-4 border-l-2 border-ochre/40 pl-4">
               {editingThoughtId === card.id ? (
-                <div className="flex items-start gap-1.5">
-                  <PenLine size={11} className="text-ink-300 mt-2 shrink-0" />
-                  <textarea
-                    autoFocus
-                    defaultValue={card.thought || ""}
-                    className="flex-1 font-quote italic text-[13px] text-ink-900 leading-relaxed bg-surface resize-none outline-none border border-line rounded-lg px-3 py-2 transition-shadow focus:border-seal/50 focus:ring-2 focus:ring-seal/20"
-                    rows={3}
-                    onBlur={(e) => onSaveThought(card.id, e.target.value)}
-                    onKeyDown={(e) => {
-                      shiftRef.current = e.shiftKey;
-                      const isEnter = e.key === "Enter" || e.keyCode === 13 || e.code === "Enter";
-                      if (isEnter && e.shiftKey) {
-                        return;
-                      }
-                      if (isEnter && !e.nativeEvent.isComposing) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onSaveThought(card.id, e.currentTarget.value);
-                      }
-                      if (e.key === "Escape") {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onStopEditingThought();
-                      }
-                    }}
-                    onKeyUp={() => {
-                      shiftRef.current = false;
-                    }}
-                    onBeforeInput={(e) => {
-                      const ie = e.nativeEvent as InputEvent;
-                      const isLineBreak =
-                        ie.inputType === "insertLineBreak" ||
-                        ie.inputType === "insertParagraph";
-                      if (isLineBreak && !shiftRef.current && !ie.isComposing) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onSaveThought(card.id, e.currentTarget.value);
-                      }
-                    }}
-                    onInput={(e) => {
-                      const target = e.currentTarget;
-                      const ie = e.nativeEvent as InputEvent;
-                      if (
-                        target.value.endsWith("\n") &&
-                        !ie.isComposing &&
-                        !shiftRef.current
-                      ) {
-                        e.preventDefault?.();
-                        e.stopPropagation?.();
-                        target.value = target.value.slice(0, -1);
-                        onSaveThought(card.id, target.value);
-                      }
-                    }}
-                  />
-                </div>
+                <textarea
+                  autoFocus
+                  defaultValue={card.thought || ""}
+                  className="w-full font-quote italic text-[13px] text-ink-900 leading-relaxed bg-surface resize-none outline-none border border-line rounded-lg px-3 py-2 transition-shadow focus:border-seal/50 focus:ring-2 focus:ring-seal/20"
+                  rows={3}
+                  onBlur={(e) => onSaveThought(card.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    shiftRef.current = e.shiftKey;
+                    const isEnter = e.key === "Enter" || e.keyCode === 13 || e.code === "Enter";
+                    if (isEnter && e.shiftKey) {
+                      return;
+                    }
+                    if (isEnter && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSaveThought(card.id, e.currentTarget.value);
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onStopEditingThought();
+                    }
+                  }}
+                  onKeyUp={() => {
+                    shiftRef.current = false;
+                  }}
+                  onBeforeInput={(e) => {
+                    const ie = e.nativeEvent as InputEvent;
+                    const isLineBreak =
+                      ie.inputType === "insertLineBreak" ||
+                      ie.inputType === "insertParagraph";
+                    if (isLineBreak && !shiftRef.current && !ie.isComposing) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSaveThought(card.id, e.currentTarget.value);
+                    }
+                  }}
+                  onInput={(e) => {
+                    const target = e.currentTarget;
+                    const ie = e.nativeEvent as InputEvent;
+                    if (
+                      target.value.endsWith("\n") &&
+                      !ie.isComposing &&
+                      !shiftRef.current
+                    ) {
+                      e.preventDefault?.();
+                      e.stopPropagation?.();
+                      target.value = target.value.slice(0, -1);
+                      onSaveThought(card.id, target.value);
+                    }
+                  }}
+                />
               ) : card.thought ? (
-                <div className="flex items-start gap-1.5">
-                  <PenLine size={11} className="text-ink-300 mt-[3px] shrink-0" />
-                  <p className="font-quote italic text-[13px] text-ink-600 leading-relaxed flex-1 whitespace-pre-wrap">
+                <div className="flex items-start gap-2">
+                  <p
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStartEditingThought(card.id);
+                    }}
+                    title={tr("editThought")}
+                    className="font-quote italic text-[13px] text-ink-700 leading-relaxed flex-1 whitespace-pre-wrap cursor-text rounded -mx-1 px-1 py-0.5 transition-colors hover:bg-ochre/5"
+                  >
                     {highlight(card.thought, query)}
                   </p>
                   <button
@@ -234,9 +266,9 @@ export const CardItem = memo(function CardItem({
             </div>
           )}
 
-          {/* Source + meta */}
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0 text-[11px] text-ink-500">
+          {/* Citation + capture time + actions */}
+          <div className="mt-4 flex items-start justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-[11px] text-ink-500">
               {card.source.favicon && (
                 <img
                   src={card.source.favicon}
@@ -251,7 +283,7 @@ export const CardItem = memo(function CardItem({
                 href={card.source.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group inline-flex items-center gap-0.5 min-w-0 font-medium max-w-[180px] hover:underline underline-offset-2"
+                className="group inline-flex items-center gap-0.5 shrink-0 max-w-[150px] font-medium hover:underline underline-offset-2"
                 style={{ color: siteColor(site) }}
                 title={card.source.title}
                 onClick={(e) => e.stopPropagation()}
@@ -262,50 +294,69 @@ export const CardItem = memo(function CardItem({
                   className="shrink-0 opacity-70 relative -top-0.5 transition-transform duration-200 group-hover:translate-x-[1px] group-hover:-translate-y-[1px]"
                 />
               </a>
+              {titleText && (
+                <>
+                  <span className="text-ink-300 shrink-0">·</span>
+                  <span
+                    className="truncate max-w-[140px] sm:max-w-[220px] text-ink-400"
+                    title={card.source.title}
+                  >
+                    {titleText}
+                  </span>
+                </>
+              )}
               {card.source.author && (
                 <>
-                  <span className="text-ink-300">·</span>
-                  <span className="truncate max-w-[120px]">
+                  <span className="text-ink-300 shrink-0">·</span>
+                  <span className="truncate max-w-[100px]">
                     {card.source.author}
                   </span>
                 </>
               )}
               {card.source.publishedAt && (
                 <>
-                  <span className="text-ink-300">·</span>
-                  <span>
+                  <span className="text-ink-300 shrink-0">·</span>
+                  <span className="shrink-0">
                     {formatPublishedDate(card.source.publishedAt, lang)}
                   </span>
                 </>
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[11px] text-ink-500 tabular-nums">
-                {formatRelativeDate(card.createdAt, lang)}
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[11px] text-ink-400 tabular-nums">
+                {timeLabel}
               </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleAsk(card.id);
-                }}
-                className={`opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all p-1 rounded ${
-                  askOpen ? "text-seal opacity-100" : "text-ink-300 hover:text-seal"
+              <div
+                className={`flex items-center gap-0.5 transition-opacity duration-200 ${
+                  askOpen
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"
                 }`}
-                title={tr("askAboutThis")}
               >
-                <MessageCircleQuestion size={13} />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(card.id);
-                }}
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-ink-300 hover:text-seal transition-all p-1 rounded"
-                title={tr("delete")}
-              >
-                <Trash2 size={13} />
-              </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleAsk(card.id);
+                  }}
+                  className={`transition-colors p-1 rounded ${
+                    askOpen ? "text-seal" : "text-ink-300 hover:text-seal"
+                  }`}
+                  title={tr("askAboutThis")}
+                >
+                  <MessageCircleQuestion size={13} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(card.id);
+                  }}
+                  className="text-ink-300 hover:text-seal transition-colors p-1 rounded"
+                  title={tr("delete")}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             </div>
           </div>
 
