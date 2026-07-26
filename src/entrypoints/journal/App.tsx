@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Card } from "@/lib/types";
-import { getCards, deleteCard, deleteCards, restoreCard, updateCard } from "@/lib/storage";
+import { updateCard } from "@/lib/storage";
 import {
   dayKey,
   formatTime,
@@ -11,12 +11,7 @@ import {
 } from "@/lib/utils";
 import {
   getAIConfig,
-  askAboutCard,
-  saveAskExchange,
-  getAskHistory,
-  deleteAskHistory,
   analyzeMindset,
-  type AskExchange,
   type MindsetAnalysis,
 } from "@/lib/ai";
 import { getLang, setLang, t, type Lang } from "@/lib/i18n";
@@ -25,35 +20,56 @@ import { SearchHeader } from "@/components/journal/SearchHeader";
 import { SelectionBar } from "@/components/journal/SelectionBar";
 import { CardItem } from "@/components/journal/CardItem";
 import { RevisitCard } from "@/components/journal/RevisitCard";
-import { UndoToast, PendingDelete } from "@/components/journal/UndoToast";
+import { UndoToast } from "@/components/journal/UndoToast";
 import { SettingsModal } from "@/components/journal/SettingsModal";
 import { MindsetModal } from "@/components/journal/MindsetModal";
 import { EmptyState } from "@/components/journal/EmptyState";
 import { Skeleton } from "@/components/journal/Skeleton";
+import {
+  useJournalCards,
+  useSelection,
+  usePendingDelete,
+  useAskState,
+} from "./hooks";
 
 export default function App() {
-  const [cards, setCards] = useState<Card[]>([]);
+  const { cards, setCards, loading } = useJournalCards();
+  const {
+    selectedIds,
+    setSelectedIds,
+    selectionMode,
+    setSelectionMode,
+    toggleSelection,
+    clearSelection,
+  } = useSelection();
+  const {
+    pendingDelete,
+    clearDeleteTimer,
+    scheduleToastDismiss,
+    handleDelete,
+    handleBatchDelete,
+    handleUndoDelete,
+  } = usePendingDelete();
+  const {
+    askCardId,
+    askExchanges,
+    askLoading,
+    askError,
+    resetAsk,
+    handleToggleAskCard,
+    handleAsk,
+  } = useAskState();
+
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingThoughtId, setEditingThoughtId] = useState<string | null>(null);
-  const [askCardId, setAskCardId] = useState<string | null>(null);
-  const [askExchanges, setAskExchanges] = useState<AskExchange[]>([]);
-  const [askLoading, setAskLoading] = useState(false);
-  const [askError, setAskError] = useState<string | null>(null);
   const [showMindset, setShowMindset] = useState(false);
   const [mindsetResult, setMindsetResult] = useState<MindsetAnalysis | null>(null);
   const [mindsetLoading, setMindsetLoading] = useState(false);
   const [mindsetError, setMindsetError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [lang, setLangState] = useState<Lang>("zh");
-  const [loading, setLoading] = useState(true);
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectionMode, setSelectionMode] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
-  const pendingDeleteRef = useRef<PendingDelete | null>(null);
-  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const askRequestRef = useRef(0);
 
   /** Close the current tab reliably, whether it was opened by the extension or not. */
   async function closeCurrentTab() {
@@ -75,16 +91,7 @@ export default function App() {
   const tr = (key: string, vars?: Record<string, string | number>) => t(key, lang, vars);
 
   useEffect(() => {
-    getCards().then((c) => { setCards(c); setLoading(false); });
     getLang().then(setLangState);
-
-    const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === "local" && changes.glean_cards) {
-        setCards(changes.glean_cards.newValue ?? []);
-      }
-    };
-    chrome.storage.onChanged.addListener(listener);
-    return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
   // Deep link: journal.html#<cardId> expands and scrolls to that card.
@@ -144,7 +151,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [query, expandedId, editingThoughtId, showSettings, selectionMode, showMindset]);
+  }, [query, expandedId, editingThoughtId, showSettings, selectionMode, showMindset, setSelectedIds, setSelectionMode]);
 
   // Swipe from the left edge to go back (trackpad / touch).
   useEffect(() => {
@@ -190,114 +197,12 @@ export default function App() {
     void closeCurrentTab();
   };
 
-  const clearDeleteTimer = () => {
-    if (deleteTimerRef.current) {
-      clearTimeout(deleteTimerRef.current);
-      deleteTimerRef.current = null;
-    }
-  };
-
-  const scheduleToastDismiss = () => {
-    clearDeleteTimer();
-    deleteTimerRef.current = setTimeout(() => {
-      pendingDeleteRef.current = null;
-      setPendingDelete(null);
-    }, 4500);
-  };
-
-  const handleDelete = async (id: string) => {
-    const index = cards.findIndex((c) => c.id === id);
-    if (index === -1) return;
-    const card = cards[index];
-    if (expandedId === id) setExpandedId(null);
-    if (askCardId === id) {
-      setAskCardId(null);
-      setAskExchanges([]);
-      setAskError(null);
-    }
-    void deleteAskHistory(id);
-    await deleteCard(id);
-    const payload: PendingDelete = { type: "single", card, index };
-    pendingDeleteRef.current = payload;
-    setPendingDelete(payload);
-    scheduleToastDismiss();
-  };
-
-  const handleUndoDelete = async () => {
-    clearDeleteTimer();
-    const pending = pendingDeleteRef.current;
-    pendingDeleteRef.current = null;
-    setPendingDelete(null);
-    if (!pending) return;
-    if (pending.type === "batch") {
-      const sorted = [...pending.items].sort((a, b) => a.index - b.index);
-      for (const item of sorted) {
-        await restoreCard(item.card, item.index);
-      }
-    } else {
-      await restoreCard(pending.card, pending.index);
-    }
-  };
-
   const handleSaveThought = async (id: string, thought: string) => {
     await updateCard(id, { thought });
     setCards((prev) =>
       prev.map((c) => (c.id === id ? { ...c, thought } : c))
     );
     setEditingThoughtId(null);
-  };
-
-  const handleToggleAskCard = async (cardId: string) => {
-    if (askCardId === cardId) {
-      setAskCardId(null);
-      setAskExchanges([]);
-      setAskError(null);
-      setAskLoading(false);
-      return;
-    }
-
-    const config = await getAIConfig();
-    if (!config) {
-      setShowSettings(true);
-      return;
-    }
-
-    const history = await getAskHistory(cardId);
-    setAskCardId(cardId);
-    setAskExchanges(history);
-    setAskError(null);
-    setAskLoading(false);
-  };
-
-  const handleAsk = async (cardId: string, question: string) => {
-    const config = await getAIConfig();
-    if (!config) {
-      setShowSettings(true);
-      return;
-    }
-
-    const card = cards.find((c) => c.id === cardId);
-    if (!card) return;
-
-    setAskLoading(true);
-    setAskError(null);
-
-    const requestId = ++askRequestRef.current;
-
-    try {
-      const answer = await askAboutCard(config, card, cards, question, lang);
-      if (askRequestRef.current !== requestId) return;
-      const exchange: AskExchange = { question, answer, createdAt: Date.now() };
-      setAskExchanges((prev) => [...prev, exchange]);
-      void saveAskExchange(cardId, exchange);
-    } catch (err) {
-      if (askRequestRef.current !== requestId) return;
-      setAskError(err instanceof Error ? err.message : tr("genFail"));
-    } finally {
-      if (askRequestRef.current === requestId) {
-        setAskLoading(false);
-      }
-    }
   };
 
   const handleAnalyzeMindset = async () => {
@@ -360,15 +265,6 @@ export default function App() {
   const handleExport = useCallback((format: "md" | "json") => {
     exportCards(format, cards);
   }, [cards, exportCards]);
-
-  const toggleSelection = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
 
   const handleExpand = useCallback((id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -450,43 +346,48 @@ export default function App() {
     const allSelected =
       filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id));
     setSelectedIds(allSelected ? new Set() : allFilteredIds);
-  }, [filtered, selectedIds]);
-
-  const handleBatchDelete = async () => {
-    if (selectedIds.size === 0) return;
-    const ids = Array.from(selectedIds);
-    const items = ids
-      .map((id) => {
-        const index = cards.findIndex((c) => c.id === id);
-        const card = cards.find((c) => c.id === id);
-        return card ? { card, index } : null;
-      })
-      .filter((item): item is { card: Card; index: number } => item !== null);
-
-    if (expandedId && selectedIds.has(expandedId)) setExpandedId(null);
-    if (askCardId && selectedIds.has(askCardId)) {
-      setAskCardId(null);
-      setAskExchanges([]);
-      setAskError(null);
-    }
-    void Promise.all(ids.map((id) => deleteAskHistory(id)));
-    await deleteCards(ids);
-
-    const payload: PendingDelete = { type: "batch", items };
-    pendingDeleteRef.current = payload;
-    setPendingDelete(payload);
-    setSelectionMode(false);
-    setSelectedIds(new Set());
-    scheduleToastDismiss();
-  };
+  }, [filtered, selectedIds, setSelectedIds]);
 
   const handleBatchExport = useCallback((format: "md" | "json") => {
     const selected = cards.filter((c) => selectedIds.has(c.id));
     if (selected.length === 0) return;
     exportCards(format, selected);
-    setSelectionMode(false);
-    setSelectedIds(new Set());
-  }, [cards, selectedIds, exportCards]);
+    clearSelection();
+  }, [cards, selectedIds, exportCards, clearSelection]);
+
+  // Wire up delete handlers that need access to current expandedId / askCardId
+  const onDelete = useCallback(
+    (id: string) => {
+      handleDelete(id, cards, expandedId, askCardId, setExpandedId, resetAsk);
+    },
+    [handleDelete, cards, expandedId, askCardId, resetAsk],
+  );
+
+  const onBatchDelete = useCallback(async () => {
+    await handleBatchDelete(
+      cards,
+      selectedIds,
+      expandedId,
+      askCardId,
+      setExpandedId,
+      resetAsk,
+      clearSelection,
+    );
+  }, [handleBatchDelete, cards, selectedIds, expandedId, askCardId, resetAsk, clearSelection]);
+
+  const onToggleAsk = useCallback(
+    (cardId: string) => {
+      handleToggleAskCard(cardId, () => setShowSettings(true));
+    },
+    [handleToggleAskCard],
+  );
+
+  const onAsk = useCallback(
+    (cardId: string, question: string) => {
+      handleAsk(cardId, question, cards, lang, tr("genFail"), () => setShowSettings(true));
+    },
+    [handleAsk, cards, lang],
+  );
 
   return (
     <div className="min-h-screen bg-paper">
@@ -526,6 +427,7 @@ export default function App() {
         settingsLabel={tr("settingsTitle")}
         analyzeMindsetLabel={tr("analyzeMindset")}
         moreLabel={tr("showMore")}
+        clearSearchLabel={tr("clearSearch")}
       >
         {selectionMode && (
           <SelectionBar
@@ -534,11 +436,8 @@ export default function App() {
             allFilteredSelected={filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id))}
             onToggleSelectAll={toggleSelectAll}
             onBatchExport={handleBatchExport}
-            onBatchDelete={handleBatchDelete}
-            onCancel={() => {
-              setSelectionMode(false);
-              setSelectedIds(new Set());
-            }}
+            onBatchDelete={onBatchDelete}
+            onCancel={clearSelection}
             selectAllLabel={tr("selectAll")}
             deselectAllLabel={tr("deselectAll")}
             selectedCountLabel={tr("selectedCount", { count: selectedIds.size })}
@@ -582,9 +481,9 @@ export default function App() {
                 editingThoughtId={editingThoughtId}
                 onToggleSelection={toggleSelection}
                 onExpand={handleExpand}
-                onDelete={handleDelete}
-                onToggleAsk={handleToggleAskCard}
-                onAsk={handleAsk}
+                onDelete={onDelete}
+                onToggleAsk={onToggleAsk}
+                onAsk={onAsk}
                 onSaveThought={handleSaveThought}
                 onStartEditingThought={setEditingThoughtId}
                 onStopEditingThought={() => setEditingThoughtId(null)}
@@ -676,9 +575,9 @@ export default function App() {
                           editingThoughtId={editingThoughtId}
                           onToggleSelection={toggleSelection}
                           onExpand={handleExpand}
-                          onDelete={handleDelete}
-                          onToggleAsk={handleToggleAskCard}
-                          onAsk={handleAsk}
+                          onDelete={onDelete}
+                          onToggleAsk={onToggleAsk}
+                          onAsk={onAsk}
                           onSaveThought={handleSaveThought}
                           onStartEditingThought={setEditingThoughtId}
                           onStopEditingThought={() => setEditingThoughtId(null)}

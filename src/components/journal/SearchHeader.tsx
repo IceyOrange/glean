@@ -26,6 +26,7 @@ interface SearchHeaderProps {
   settingsLabel: string;
   analyzeMindsetLabel: string;
   moreLabel: string;
+  clearSearchLabel: string;
   /** Rendered inside the sticky bar (e.g. the selection toolbar). */
   children?: ReactNode;
 }
@@ -54,6 +55,7 @@ export function SearchHeader({
   settingsLabel,
   analyzeMindsetLabel,
   moreLabel,
+  clearSearchLabel,
   children,
 }: SearchHeaderProps) {
   const [showMore, setShowMore] = useState(false);
@@ -99,6 +101,7 @@ export function SearchHeader({
             onClick={onBack}
             className="p-2 text-ink-400 hover:text-ink-700 transition-colors shrink-0"
             title={backLabel}
+            aria-label={backLabel}
           >
             <ArrowLeft size={17} />
           </button>
@@ -120,6 +123,7 @@ export function SearchHeader({
               <button
                 onClick={onClearQuery}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-ink-300 hover:text-ink-600 transition-colors"
+                aria-label={clearSearchLabel}
               >
                 <X size={14} />
               </button>
@@ -136,6 +140,7 @@ export function SearchHeader({
                 onClick={onAnalyzeMindset}
                 className="p-2 text-ink-400 hover:text-seal rounded-lg transition-colors"
                 title={analyzeMindsetLabel}
+                aria-label={analyzeMindsetLabel}
               >
                 <Brain size={16} />
               </button>
@@ -151,6 +156,7 @@ export function SearchHeader({
                       : "text-ink-400 hover:text-ink-700"
                   }`}
                   title={moreLabel}
+                  aria-label={moreLabel}
                 >
                   <MoreHorizontal size={16} />
                 </button>
@@ -202,6 +208,7 @@ export function SearchHeader({
               onClick={onOpenSettings}
               className="p-2 text-ink-400 hover:text-ink-700 rounded-lg transition-colors"
               title={settingsLabel}
+              aria-label={settingsLabel}
             >
               <Settings size={16} />
             </button>

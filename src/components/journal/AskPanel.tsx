@@ -84,6 +84,7 @@ export function AskPanel({
           }}
           className="p-1 text-ink-300 hover:text-ink-600 transition-colors"
           title={collapseLabel}
+          aria-label={collapseLabel}
         >
           <ChevronUp size={14} />
         </button>
@@ -159,6 +160,7 @@ export function AskPanel({
           disabled={!question.trim() || loading}
           className="shrink-0 p-2 rounded-lg bg-ink-900 text-paper hover:bg-ink-800 disabled:opacity-40 disabled:hover:bg-ink-900 transition-colors"
           title={submitLabel}
+          aria-label={submitLabel}
         >
           <Send size={14} />
         </button>

@@ -97,6 +97,7 @@ export default function App() {
             onClick={() => setView("settings")}
             className="p-1.5 text-ink-400 hover:text-ink-600 hover:bg-surface rounded-lg transition-colors"
             title={tr("settings")}
+            aria-label={tr("settings")}
           >
             <Settings size={15} />
           </button>
@@ -273,6 +274,7 @@ function SettingsView({
         <button
           onClick={onBack}
           className="p-1 text-ink-400 hover:text-ink-600 transition-colors"
+          aria-label={tr("back")}
         >
           <ChevronLeft size={18} />
         </button>

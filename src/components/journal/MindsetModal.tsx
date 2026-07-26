@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { MindsetAnalysis } from "@/lib/ai";
 import { X, RefreshCw, Brain, Target, Compass, GitBranch, Link2 } from "lucide-react";
 
@@ -22,6 +22,8 @@ interface MindsetModalProps {
   onClose: () => void;
 }
 
+const TITLE_ID = "mindset-modal-title";
+
 export function MindsetModal({
   open,
   loading,
@@ -41,6 +43,10 @@ export function MindsetModal({
   onAnalyze,
   onClose,
 }: MindsetModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
+
   // Trigger analysis automatically when the modal opens and there is no result yet.
   useEffect(() => {
     if (open && !analysis && !loading && !error) {
@@ -48,31 +54,83 @@ export function MindsetModal({
     }
   }, [open, analysis, loading, error, onAnalyze]);
 
-  // Close on Escape.
+  // Focus trap + Escape close.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+
+    // Record the previously focused element so we can restore it on close.
+    prevFocusRef.current = document.activeElement as HTMLElement;
+
+    // Focus the first focusable element inside the modal.
+    const panel = panelRef.current;
+    if (panel) {
+      const focusable = panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length > 0) {
+        requestAnimationFrame(() => focusable[0].focus());
+      }
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+
+      if (e.key !== "Tab" || !panel) return;
+
+      const focusable = panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      // Restore focus when the modal closes.
+      prevFocusRef.current?.focus();
+      prevFocusRef.current = null;
+    };
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
     <div
+      ref={overlayRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={TITLE_ID}
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 p-4"
       onClick={onClose}
     >
       <div
+        ref={panelRef}
         className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-paper border border-line-soft rounded-2xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 bg-paper/95 backdrop-blur-sm border-b border-line-soft px-5 py-4 flex items-center justify-between gap-3 z-10">
           <div className="flex items-center gap-2 text-ink-900">
             <Brain size={18} className="text-seal" />
-            <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+            <h2 id={TITLE_ID} className="text-[15px] font-semibold tracking-tight">{title}</h2>
           </div>
           <div className="flex items-center gap-1">
             {analysis && !loading && (
@@ -80,6 +138,7 @@ export function MindsetModal({
                 onClick={onAnalyze}
                 className="p-1.5 text-ink-400 hover:text-seal transition-colors rounded-lg hover:bg-surface"
                 title={regenerateLabel}
+                aria-label={regenerateLabel}
               >
                 <RefreshCw size={15} />
               </button>
@@ -88,6 +147,7 @@ export function MindsetModal({
               onClick={onClose}
               className="p-1.5 text-ink-400 hover:text-ink-600 transition-colors rounded-lg hover:bg-surface"
               title={closeLabel}
+              aria-label={closeLabel}
             >
               <X size={18} />
             </button>

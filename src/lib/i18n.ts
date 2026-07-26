@@ -35,6 +35,7 @@ const translations: Record<Lang, Record<string, string>> = {
     delete: "删除",
     deleteConfirm: "确定删除这条引用？",
     search: "搜索引用、感想、来源…",
+    clearSearch: "清除搜索",
     cardCount: "{{count}} 条",
     noMatch: "没有匹配的卡片。",
     noCards: "还没有卡片。",
@@ -63,6 +64,7 @@ const translations: Record<Lang, Record<string, string>> = {
     mindsetEmpty: "至少需要一条灵感记录才能分析思维模式。",
     // Shared AI
     genFail: "生成失败",
+    aiInvalidResponse: "AI 返回格式异常，请重试。",
     // Settings
     settingsTitle: "设置",
     settingsDesc: "自定义语言、主题和 AI 选项。",
@@ -206,6 +208,7 @@ const translations: Record<Lang, Record<string, string>> = {
     delete: "Delete",
     deleteConfirm: "Delete this quote?",
     search: "Search quotes, thoughts, sources…",
+    clearSearch: "Clear search",
     cardCount: "{{count}} card(s)",
     noMatch: "No matching cards.",
     noCards: "No cards yet.",
@@ -234,6 +237,7 @@ const translations: Record<Lang, Record<string, string>> = {
     mindsetEmpty: "At least one inspiration record is needed to analyze your mindset.",
     // Shared AI
     genFail: "Generation failed",
+    aiInvalidResponse: "AI returned an invalid format. Please retry.",
     // Settings
     settingsTitle: "Settings",
     settingsDesc: "Customize language, theme, and AI options.",
@@ -377,6 +381,7 @@ const translations: Record<Lang, Record<string, string>> = {
     delete: "Supprimer",
     deleteConfirm: "Supprimer cette citation ?",
     search: "Rechercher citations, réflexions, sources…",
+    clearSearch: "Effacer la recherche",
     cardCount: "{{count}} carte(s)",
     noMatch: "Aucune carte correspondante.",
     noCards: "Pas encore de carte.",
@@ -405,6 +410,7 @@ const translations: Record<Lang, Record<string, string>> = {
     mindsetEmpty: "Au moins un enregistrement d'inspiration est nécessaire pour analyser votre façon de penser.",
     // Shared AI
     genFail: "Échec de la génération",
+    aiInvalidResponse: "L'IA a renvoyé un format invalide. Veuillez réessayer.",
     // Settings
     settingsTitle: "Paramètres",
     settingsDesc: "Personnalisez la langue, le thème et les options d'IA.",

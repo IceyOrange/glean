@@ -109,6 +109,7 @@ export const CardItem = memo(function CardItem({
               selected ? "text-seal" : "text-ink-300 hover:text-ink-600"
             }`}
             title={selected ? tr("deselectAll") : tr("selectAll")}
+            aria-label={selected ? tr("deselectAll") : tr("selectAll")}
           >
             {selected ? <Check size={16} /> : <Square size={16} />}
           </button>
@@ -247,6 +248,7 @@ export const CardItem = memo(function CardItem({
                     }}
                     className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-ink-300 hover:text-ink-600 transition-all p-1 shrink-0"
                     title={tr("editThought")}
+                    aria-label={tr("editThought")}
                   >
                     <Pencil size={12} />
                   </button>
@@ -343,6 +345,7 @@ export const CardItem = memo(function CardItem({
                     askOpen ? "text-seal" : "text-ink-300 hover:text-seal"
                   }`}
                   title={tr("askAboutThis")}
+                  aria-label={tr("askAboutThis")}
                 >
                   <MessageCircleQuestion size={13} />
                 </button>
@@ -353,6 +356,7 @@ export const CardItem = memo(function CardItem({
                   }}
                   className="text-ink-300 hover:text-seal transition-colors p-1 rounded"
                   title={tr("delete")}
+                  aria-label={tr("delete")}
                 >
                   <Trash2 size={13} />
                 </button>
