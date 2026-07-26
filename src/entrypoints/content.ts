@@ -2,6 +2,15 @@ import { saveCard, updateCard, deleteCard } from "@/lib/storage";
 import type { Card, CitationSource } from "@/lib/types";
 import { getLang, t, type Lang } from "@/lib/i18n";
 import { STYLES } from "@/lib/content/styles";
+import { extractCitationSource } from "@/lib/content/citation";
+import {
+  SHORT_WIDTH,
+  LONG_WIDTH_BASE,
+  WIDTH_EXPAND_THRESHOLD,
+  WIDTH_CONTRACT_THRESHOLD,
+  getMaxTextareaWidth,
+  clampToastPosition,
+} from "@/lib/content/geometry";
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -21,93 +30,6 @@ export default defineContentScript({
         currentLang = (changes.glean_lang.newValue as Lang) || "zh";
       }
     });
-
-    function extractCitationSource(): CitationSource {
-      const getMeta = (name: string): string | undefined => {
-        const el =
-          document.querySelector(`meta[property="${name}"]`) ??
-          document.querySelector(`meta[name="${name}"]`);
-        return el?.getAttribute("content")?.trim() || undefined;
-      };
-
-      const heading = (() => {
-        const article = document.querySelector("article");
-        const scope = article ?? document;
-        const h1 = scope.querySelector("h1");
-        return h1?.textContent?.trim() || undefined;
-      })();
-
-      const siteName =
-        getMeta("og:site_name") ?? getMeta("application-name") ?? undefined;
-
-      const ldData = (() => {
-        const el = document.querySelector('script[type="application/ld+json"]');
-        if (!el) return null;
-        try {
-          return JSON.parse(el.textContent ?? "");
-        } catch {
-          return null;
-        }
-      })();
-
-      const author = (() => {
-        const meta =
-          getMeta("author") ??
-          getMeta("article:author") ??
-          getMeta("og:article:author");
-        if (meta) return meta;
-
-        if (ldData) {
-          if (ldData.author?.name) return ldData.author.name;
-          if (typeof ldData.author === "string") return ldData.author;
-        }
-
-        const byline = document.querySelector(
-          '[rel="author"], .author, .byline, [itemprop="author"]'
-        );
-        return byline?.textContent?.trim() || undefined;
-      })();
-
-      const publishedAt = (() => {
-        const meta =
-          getMeta("article:published_time") ??
-          getMeta("date") ??
-          getMeta("publish_date");
-        if (meta) return meta;
-
-        const timeEl = document.querySelector(
-          "article time[datetime], time[datetime]"
-        );
-        if (timeEl) return timeEl.getAttribute("datetime") || undefined;
-
-        if (ldData?.datePublished) return ldData.datePublished;
-
-        return undefined;
-      })();
-
-      const favicon = (() => {
-        const link = document.querySelector(
-          'link[rel="icon"], link[rel="shortcut icon"]'
-        );
-        const href = link?.getAttribute("href");
-        if (!href) return undefined;
-        try {
-          return new URL(href, location.origin).href;
-        } catch {
-          return undefined;
-        }
-      })();
-
-      return {
-        url: location.href,
-        title: document.title,
-        heading,
-        siteName,
-        author,
-        publishedAt,
-        favicon,
-      };
-    }
 
     // ── Shared host / shadow ──────────────────────────
 
@@ -131,13 +53,16 @@ export default defineContentScript({
 
     // Auto-commit an unsubmitted thought so it is never lost when the toast
     // is displaced by a new save or dismissed by an outside click.
+    // C2 fix: capture values into locals before any async work to prevent
+    // destroyAll nullifying them during the async gap (TOCTOU).
     function flushPendingThought() {
       if (!shadowRoot || !activeToastCardId) return;
       const ta = shadowRoot.getElementById(
         "glean-thought"
       ) as HTMLTextAreaElement | null;
       const text = ta?.value.trim();
-      if (text) void updateCard(activeToastCardId, { thought: text });
+      const cardId = activeToastCardId;
+      if (text) void updateCard(cardId, { thought: text });
     }
 
     function destroyAll() {
@@ -153,36 +78,6 @@ export default defineContentScript({
       if (!shadowRoot) return;
       const old = shadowRoot.querySelector(".trigger, .toast");
       if (old) old.remove();
-    }
-
-    // ── Toast geometry helpers ────────────────────────
-
-    const SHORT_WIDTH = 220;
-    const LONG_WIDTH_BASE = 380;
-    const WIDTH_EXPAND_THRESHOLD = 18; // px before edge
-    const WIDTH_CONTRACT_THRESHOLD = 40; // px of headroom before contracting
-
-    function getMaxTextareaWidth() {
-      // viewport margins (8px each side) + toast border + thought-area padding
-      // + flex gap + send button. Keep the short width as a floor.
-      return Math.max(SHORT_WIDTH, window.innerWidth - 72);
-    }
-
-    function clampToastPosition() {
-      if (!toastEl) return;
-      const rect = toastEl.getBoundingClientRect();
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      let left = parseFloat(toastEl.style.left) || rect.left;
-      let top = parseFloat(toastEl.style.top) || rect.top;
-
-      if (rect.right > vw - 8) left = vw - rect.width - 8;
-      if (rect.bottom > vh - 8) top = vh - rect.height - 8;
-      if (left < 8) left = 8;
-      if (top < 8) top = 8;
-
-      toastEl.style.left = `${left}px`;
-      toastEl.style.top = `${top}px`;
     }
 
     // ── Trigger icon (click = instant save) ───────────
@@ -282,13 +177,112 @@ export default defineContentScript({
       // Clamp to viewport after the first paint so the enter animation starts
       // from a visible position.
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => clampToastPosition());
+        requestAnimationFrame(() => { if (toastEl) clampToastPosition(toastEl); });
       });
 
       let showThought = autoThought;
       let thoughtText = "";
       let dismissed = false;
       let dismissTimer: ReturnType<typeof setTimeout> | null = null;
+
+      // ── P1+P2 fix: bind toastEl-level listeners ONCE ──
+      // These used to be inside render(), causing accumulation on every toggle.
+
+      // Prevent keyboard/input events from escaping the toast's Shadow DOM.
+      // Without this, pages (e.g. AI chatboxes) with focus-stealing shortcuts
+      // see a retargeted event target and think the user is not typing in an
+      // input, so they steal focus back to their own composer.
+      for (const evt of ["keydown", "keyup", "input", "keypress", "beforeinput"] as const) {
+        toastEl.addEventListener(evt, (e) => e.stopPropagation());
+      }
+
+      // Focus trap: when the thought panel is open and focus leaves it,
+      // bring it back to the textarea. This defends against pages that
+      // programmatically steal focus (e.g. AI chatboxes refocusing their
+      // composer while the user is typing).
+      // S3 fix: this replaces the global HTMLElement.prototype.focus patch.
+      // Shadow DOM retargeting + stopPropagation on key/input events already
+      // prevents most focus theft; this focusin listener catches the rest.
+      toastEl.addEventListener("focusin", () => {
+        if (!showThought || !toastEl || dismissed) return;
+        const active = shadowRoot?.activeElement;
+        if (active && toastEl.contains(active)) return;
+        const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
+        ta?.focus();
+      });
+
+      toastEl.addEventListener("focusout", () => {
+        if (!showThought || !toastEl || dismissed) return;
+        const active = shadowRoot?.activeElement;
+        if (!active || !toastEl.contains(active)) {
+          const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
+          ta?.focus();
+        }
+      });
+
+      // Prevent toast clicks from bubbling to page
+      toastEl.addEventListener("mousedown", (e) => e.stopPropagation());
+
+      // Allow hover to pause dismiss
+      toastEl.addEventListener("mouseenter", () => {
+        if (dismissTimer) clearTimeout(dismissTimer);
+      });
+      toastEl.addEventListener("mouseleave", () => {
+        if (!dismissed) scheduleDismiss();
+      });
+
+      // ── Event delegation: single click handler on toastEl ──
+      toastEl.addEventListener("click", (e) => {
+        const target = (e.target as HTMLElement).closest("[id]");
+        if (!target) return;
+        const id = (target as HTMLElement).id;
+
+        if (id === "glean-undo") {
+          e.stopPropagation();
+          if (dismissTimer) clearTimeout(dismissTimer);
+          void deleteCard(cardId).catch(() => { /* Card already gone */ });
+          activeToastCardId = null;
+          if (toastEl) {
+            const label = toastEl.querySelector(".toast-label") as HTMLElement | null;
+            if (label) label.textContent = tr("deletedToast");
+            for (const sel of [".toast-thought", ".toast-sep", "#glean-note", "#glean-undo", "#glean-journal"]) {
+              const el = toastEl.querySelector(sel) as HTMLElement | null;
+              if (el) el.style.display = "none";
+            }
+          }
+          setTimeout(dismiss, 900);
+          return;
+        }
+
+        if (id === "glean-journal") {
+          e.stopPropagation();
+          const url = `${chrome.runtime.getURL("journal.html")}#${cardId}`;
+          chrome.runtime.sendMessage({ type: "openTab", url });
+          dismiss();
+          return;
+        }
+
+        if (id === "glean-note") {
+          e.stopPropagation();
+          const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
+          if (ta) thoughtText = ta.value;
+          showThought = !showThought;
+          render();
+          if (showThought) {
+            const newTa = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
+            newTa?.focus();
+          }
+          return;
+        }
+
+        if (id === "glean-send") {
+          e.stopPropagation();
+          void submitThought();
+          return;
+        }
+      });
+
+      // ── render(): only updates DOM, no listener binding ──
 
       function render() {
         if (!toastEl || dismissed) return;
@@ -319,249 +313,26 @@ export default defineContentScript({
           `;
         }
 
-        toastEl!.innerHTML = html;
+        toastEl.innerHTML = html;
 
         // Auto-dismiss only while idle (an editor with typed text stays open)
         scheduleDismiss();
 
-        // Bind events
-        const noteBtn = shadowRoot!.getElementById("glean-note");
-        const undoBtn = shadowRoot!.getElementById("glean-undo");
-        const journalBtn = shadowRoot!.getElementById("glean-journal");
-        const sendBtn = shadowRoot!.getElementById("glean-send") as HTMLButtonElement | null;
-        const textarea = shadowRoot!.getElementById(
+        // Bind textarea-specific listeners (these are on the textarea element
+        // which is recreated on each render, so they must be rebound).
+        bindTextareaListeners();
+      }
+
+      // ── Textarea-specific listeners (rebound on each render) ──
+
+      let enterSubmitting = false;
+      let shiftHeld = false;
+
+      function bindTextareaListeners() {
+        const textarea = shadowRoot?.getElementById(
           "glean-thought"
         ) as HTMLTextAreaElement | null;
-
-        // Prevent keyboard/input events from escaping the toast's Shadow DOM.
-        // Without this, pages (e.g. AI chatboxes) with focus-stealing shortcuts
-        // see a retargeted event target and think the user is not typing in an
-        // input, so they steal focus back to their own composer.
-        toastEl!.addEventListener("keydown", (e) => e.stopPropagation());
-        toastEl!.addEventListener("keyup", (e) => e.stopPropagation());
-        toastEl!.addEventListener("input", (e) => e.stopPropagation());
-        toastEl!.addEventListener("keypress", (e) => e.stopPropagation());
-        toastEl!.addEventListener("beforeinput", (e) => e.stopPropagation());
-
-        // Focus trap: when the thought panel is open and focus leaves it,
-        // bring it back to the textarea. This defends against pages that
-        // programmatically steal focus (e.g. AI chatboxes refocusing their
-        // composer while the user is typing).
-        if (textarea) {
-          const trapFocus = () => {
-            if (!showThought || !toastEl || dismissed) return;
-            const active = shadowRoot!.activeElement;
-            if (!active || !toastEl.contains(active)) {
-              textarea.focus();
-            }
-          };
-          toastEl!.addEventListener("focusout", trapFocus);
-        }
-
-        undoBtn?.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          if (dismissTimer) clearTimeout(dismissTimer);
-          try {
-            await deleteCard(cardId);
-          } catch {
-            // Card already gone; dismiss either way
-          }
-          activeToastCardId = null;
-          if (toastEl) {
-            const label = toastEl.querySelector(".toast-label") as HTMLElement | null;
-            if (label) label.textContent = tr("deletedToast");
-            for (const sel of [".toast-thought", ".toast-sep", "#glean-note", "#glean-undo", "#glean-journal"]) {
-              const el = toastEl.querySelector(sel) as HTMLElement | null;
-              if (el) el.style.display = "none";
-            }
-          }
-          setTimeout(dismiss, 900);
-        });
-
-        journalBtn?.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const url = `${chrome.runtime.getURL("journal.html")}#${cardId}`;
-          chrome.runtime.sendMessage({ type: "openTab", url });
-          dismiss();
-        });
-
-        noteBtn?.addEventListener("click", (e) => {
-          e.stopPropagation();
-          if (textarea) thoughtText = textarea.value;
-          showThought = !showThought;
-          render();
-          if (showThought) {
-            const ta = shadowRoot!.getElementById(
-              "glean-thought"
-            ) as HTMLTextAreaElement | null;
-            ta?.focus();
-          }
-        });
-
-        async function submitThought() {
-          const text = textarea?.value ?? thoughtText;
-          thoughtText = text;
-          if (!text.trim()) {
-            dismiss();
-            return;
-          }
-          // Show saving state
-          if (sendBtn) {
-            sendBtn.disabled = true;
-            sendBtn.innerHTML = `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
-          }
-          try {
-            await updateCard(cardId, { thought: text.trim() });
-            if (toastEl) {
-              const thoughtArea = toastEl.querySelector(".toast-thought") as HTMLElement | null;
-              const label = toastEl.querySelector(".toast-label") as HTMLElement | null;
-
-              // Freeze the toast at its current size so the inner thought area
-              // can collapse without the whole box snapping smaller first.
-              const startRect = toastEl.getBoundingClientRect();
-              toastEl.style.width = `${startRect.width}px`;
-              toastEl.style.height = `${startRect.height}px`;
-              toastEl.style.transition = "none";
-              toastEl.style.overflow = "hidden";
-
-              if (thoughtArea) {
-                thoughtArea.style.maxHeight = thoughtArea.scrollHeight + "px";
-                thoughtArea.offsetHeight;
-                thoughtArea.style.transition = "max-height .25s cubic-bezier(.4,0,.2,1), opacity .2s ease, padding .25s cubic-bezier(.4,0,.2,1)";
-                thoughtArea.style.maxHeight = "0";
-                thoughtArea.style.opacity = "0";
-                thoughtArea.style.padding = "0 8px";
-                thoughtArea.style.overflow = "hidden";
-                thoughtArea.addEventListener("transitionend", () => thoughtArea.remove(), { once: true });
-              }
-
-              if (label) {
-                label.style.transition = "opacity .15s ease";
-                label.style.opacity = "0";
-                setTimeout(() => {
-                  if (!label.isConnected) return;
-                  label.textContent = tr("thoughtSaved");
-                  label.style.opacity = "1";
-                }, 150);
-              }
-
-              // Once the thought area has collapsed, measure the compact bar
-              // size and animate the toast itself down to it.
-              setTimeout(() => {
-                if (!toastEl) return;
-                toastEl.style.width = "";
-                toastEl.style.height = "";
-                const compactRect = toastEl.getBoundingClientRect();
-
-                requestAnimationFrame(() => {
-                  if (!toastEl) return;
-                  toastEl.style.width = `${startRect.width}px`;
-                  toastEl.style.height = `${startRect.height}px`;
-                  toastEl.style.transition = "none";
-                  toastEl.offsetHeight; // force reflow
-
-                  requestAnimationFrame(() => {
-                    if (!toastEl) return;
-                    toastEl.style.transition = "width .35s cubic-bezier(.4,0,.2,1), height .3s ease";
-                    toastEl.style.width = `${compactRect.width}px`;
-                    toastEl.style.height = `${compactRect.height}px`;
-
-                    const onDone = (e: TransitionEvent) => {
-                      if (e.propertyName !== "width" || !toastEl) return;
-                      toastEl.style.width = "";
-                      toastEl.style.height = "";
-                      toastEl.style.overflow = "";
-                      toastEl.style.transition = "";
-                      toastEl.removeEventListener("transitionend", onDone);
-                    };
-                    toastEl.addEventListener("transitionend", onDone);
-                  });
-                });
-              }, 280);
-            }
-            setTimeout(dismiss, 4500);
-          } catch {
-            dismiss();
-          }
-        }
-
-        sendBtn?.addEventListener("click", (e) => {
-          e.stopPropagation();
-          void submitThought();
-        });
-
-        // Track whether Enter already triggered submission so the keydown,
-        // beforeinput and input fallbacks do not submit more than once.
-        let enterSubmitting = false;
-        const tryEnterSubmit = (e?: Event) => {
-          if (enterSubmitting) return;
-          enterSubmitting = true;
-          if (e) {
-            e.preventDefault?.();
-            e.stopPropagation?.();
-          }
-          void submitThought();
-        };
-
-        // Track Shift key state so beforeinput/input fallbacks can still allow
-        // Shift+Enter to insert a newline even though InputEvent has no shiftKey.
-        let shiftHeld = false;
-
-        textarea?.addEventListener(
-          "keydown",
-          (e) => {
-            shiftHeld = e.shiftKey;
-            const isEnter = e.key === "Enter" || e.keyCode === 13 || e.code === "Enter";
-            if (isEnter && e.shiftKey) {
-              // Let Shift+Enter insert a newline (default behaviour).
-              return;
-            }
-            if (isEnter && !e.isComposing) {
-              tryEnterSubmit(e);
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              dismiss();
-            }
-          },
-          true
-        );
-
-        textarea?.addEventListener("keyup", () => {
-          shiftHeld = false;
-        });
-
-        // Fallback for pages that intercept keydown: catch Enter at the
-        // beforeinput/input level and remove the inserted newline.
-        textarea?.addEventListener("beforeinput", (e) => {
-          const ie = e as InputEvent;
-          const isLineBreak =
-            ie.inputType === "insertLineBreak" ||
-            ie.inputType === "insertParagraph";
-          if (isLineBreak && !shiftHeld && !ie.isComposing) {
-            e.preventDefault();
-            e.stopPropagation();
-            tryEnterSubmit();
-          }
-        });
-
-        textarea?.addEventListener("input", (e) => {
-          if (!textarea) return;
-          // If a newline somehow got inserted (key interception fallback),
-          // strip it and submit unless the user is composing or holding Shift.
-          const ie = e as InputEvent;
-          if (
-            textarea.value.endsWith("\n") &&
-            !ie.isComposing &&
-            !shiftHeld
-          ) {
-            e.preventDefault?.();
-            e.stopPropagation?.();
-            textarea.value = textarea.value.slice(0, -1);
-            tryEnterSubmit();
-          }
-        });
+        if (!textarea) return;
 
         // Auto-resize textarea (width + height)
         const oldMeasure = shadowRoot!.querySelector(".glean-measure");
@@ -573,13 +344,12 @@ export default defineContentScript({
         shadowRoot!.appendChild(measure);
 
         // Set explicit initial width so CSS transition has a starting value
-        if (textarea) {
-          textarea.style.width = `${SHORT_WIDTH}px`;
-          textarea.style.maxWidth = `${getMaxTextareaWidth()}px`;
-        }
+        textarea.style.width = `${SHORT_WIDTH}px`;
+        textarea.style.maxWidth = `${getMaxTextareaWidth()}px`;
 
         let widthExpanded = false;
         let widthContractTimer: ReturnType<typeof setTimeout> | null = null;
+
         const autoResize = () => {
           if (!textarea) return;
 
@@ -606,7 +376,7 @@ export default defineContentScript({
               if (widthContractTimer) { clearTimeout(widthContractTimer); widthContractTimer = null; }
               textarea.style.width = `${longW}px`;
               // Ensure the toast doesn't spill outside the viewport after it grows.
-              setTimeout(clampToastPosition, 50);
+              setTimeout(() => { if (toastEl) clampToastPosition(toastEl); }, 50);
             }
           } else if (widthExpanded) {
             // Contract back once there is comfortable headroom (avoid jitter while typing)
@@ -625,7 +395,7 @@ export default defineContentScript({
                   if (latestVal.trim() && latestLongest >= SHORT_WIDTH - WIDTH_CONTRACT_THRESHOLD) return;
                   widthExpanded = false;
                   textarea.style.width = `${SHORT_WIDTH}px`;
-                  setTimeout(clampToastPosition, 50);
+                  setTimeout(() => { if (toastEl) clampToastPosition(toastEl); }, 50);
                 }, 400);
               }
             } else if (widthContractTimer) {
@@ -639,10 +409,165 @@ export default defineContentScript({
           const targetH = Math.min(textarea.scrollHeight, 120);
           textarea.style.height = targetH + "px";
         };
-        textarea?.addEventListener("input", autoResize);
 
-        // Prevent toast clicks from bubbling to page
-        toastEl!.addEventListener("mousedown", (e) => e.stopPropagation());
+        textarea.addEventListener("input", autoResize);
+
+        // Track whether Enter already triggered submission so the keydown,
+        // beforeinput and input fallbacks do not submit more than once.
+        const tryEnterSubmit = (e?: Event) => {
+          if (enterSubmitting) return;
+          enterSubmitting = true;
+          if (e) {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+          }
+          void submitThought();
+        };
+
+        textarea.addEventListener("keydown", (e) => {
+          shiftHeld = e.shiftKey;
+          const isEnter = e.key === "Enter" || e.keyCode === 13 || e.code === "Enter";
+          if (isEnter && e.shiftKey) {
+            // Let Shift+Enter insert a newline (default behaviour).
+            return;
+          }
+          if (isEnter && !e.isComposing) {
+            tryEnterSubmit(e);
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            dismiss();
+          }
+        }, true);
+
+        textarea.addEventListener("keyup", () => {
+          shiftHeld = false;
+        });
+
+        // Fallback for pages that intercept keydown: catch Enter at the
+        // beforeinput/input level and remove the inserted newline.
+        textarea.addEventListener("beforeinput", (e) => {
+          const ie = e as InputEvent;
+          const isLineBreak =
+            ie.inputType === "insertLineBreak" ||
+            ie.inputType === "insertParagraph";
+          if (isLineBreak && !shiftHeld && !ie.isComposing) {
+            e.preventDefault();
+            e.stopPropagation();
+            tryEnterSubmit();
+          }
+        });
+
+        textarea.addEventListener("input", (e) => {
+          if (!textarea) return;
+          // If a newline somehow got inserted (key interception fallback),
+          // strip it and submit unless the user is composing or holding Shift.
+          const ie = e as InputEvent;
+          if (
+            textarea.value.endsWith("\n") &&
+            !ie.isComposing &&
+            !shiftHeld
+          ) {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+            textarea.value = textarea.value.slice(0, -1);
+            tryEnterSubmit();
+          }
+        });
+      }
+
+      // ── submitThought ──
+
+      async function submitThought() {
+        const textarea = shadowRoot?.getElementById(
+          "glean-thought"
+        ) as HTMLTextAreaElement | null;
+        const sendBtn = shadowRoot?.getElementById("glean-send") as HTMLButtonElement | null;
+        const text = textarea?.value ?? thoughtText;
+        thoughtText = text;
+        if (!text.trim()) {
+          dismiss();
+          return;
+        }
+        // Show saving state
+        if (sendBtn) {
+          sendBtn.disabled = true;
+          sendBtn.innerHTML = `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
+        }
+        try {
+          await updateCard(cardId, { thought: text.trim() });
+          if (toastEl) {
+            const thoughtArea = toastEl.querySelector(".toast-thought") as HTMLElement | null;
+            const label = toastEl.querySelector(".toast-label") as HTMLElement | null;
+
+            // Freeze the toast at its current size so the inner thought area
+            // can collapse without the whole box snapping smaller first.
+            const startRect = toastEl.getBoundingClientRect();
+            toastEl.style.width = `${startRect.width}px`;
+            toastEl.style.height = `${startRect.height}px`;
+            toastEl.style.transition = "none";
+            toastEl.style.overflow = "hidden";
+
+            if (thoughtArea) {
+              thoughtArea.style.maxHeight = thoughtArea.scrollHeight + "px";
+              thoughtArea.offsetHeight;
+              thoughtArea.style.transition = "max-height .25s cubic-bezier(.4,0,.2,1), opacity .2s ease, padding .25s cubic-bezier(.4,0,.2,1)";
+              thoughtArea.style.maxHeight = "0";
+              thoughtArea.style.opacity = "0";
+              thoughtArea.style.padding = "0 8px";
+              thoughtArea.style.overflow = "hidden";
+              thoughtArea.addEventListener("transitionend", () => thoughtArea.remove(), { once: true });
+            }
+
+            if (label) {
+              label.style.transition = "opacity .15s ease";
+              label.style.opacity = "0";
+              setTimeout(() => {
+                if (!label.isConnected) return;
+                label.textContent = tr("thoughtSaved");
+                label.style.opacity = "1";
+              }, 150);
+            }
+
+            // Once the thought area has collapsed, measure the compact bar
+            // size and animate the toast itself down to it.
+            setTimeout(() => {
+              if (!toastEl) return;
+              toastEl.style.width = "";
+              toastEl.style.height = "";
+              const compactRect = toastEl.getBoundingClientRect();
+
+              requestAnimationFrame(() => {
+                if (!toastEl) return;
+                toastEl.style.width = `${startRect.width}px`;
+                toastEl.style.height = `${startRect.height}px`;
+                toastEl.style.transition = "none";
+                toastEl.offsetHeight; // force reflow
+
+                requestAnimationFrame(() => {
+                  if (!toastEl) return;
+                  toastEl.style.transition = "width .35s cubic-bezier(.4,0,.2,1), height .3s ease";
+                  toastEl.style.width = `${compactRect.width}px`;
+                  toastEl.style.height = `${compactRect.height}px`;
+
+                  const onDone = (e: TransitionEvent) => {
+                    if (e.propertyName !== "width" || !toastEl) return;
+                    toastEl.style.width = "";
+                    toastEl.style.height = "";
+                    toastEl.style.overflow = "";
+                    toastEl.style.transition = "";
+                    toastEl.removeEventListener("transitionend", onDone);
+                  };
+                  toastEl.addEventListener("transitionend", onDone);
+                });
+              });
+            }, 280);
+          }
+          setTimeout(dismiss, 4500);
+        } catch {
+          dismiss();
+        }
       }
 
       function scheduleDismiss() {
@@ -671,14 +596,6 @@ export default defineContentScript({
           setTimeout(destroyAll, 200);
         }
       }
-
-      // Allow hover to pause dismiss
-      toastEl.addEventListener("mouseenter", () => {
-        if (dismissTimer) clearTimeout(dismissTimer);
-      });
-      toastEl.addEventListener("mouseleave", () => {
-        if (!dismissed) scheduleDismiss();
-      });
 
       shadowRoot.appendChild(toastEl);
       render();
@@ -810,7 +727,8 @@ export default defineContentScript({
     // Keep the toast inside the viewport when the window is resized and
     // prevent the textarea from growing wider than the new viewport.
     window.addEventListener("resize", () => {
-      clampToastPosition();
+      if (!toastEl) return;
+      clampToastPosition(toastEl);
       const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
       if (!ta) return;
       const maxW = getMaxTextareaWidth();
@@ -819,9 +737,8 @@ export default defineContentScript({
       const currentW = parseFloat(ta.style.width);
       if (currentW > longW) {
         ta.style.width = `${Math.max(SHORT_WIDTH, longW)}px`;
-        setTimeout(clampToastPosition, 50);
+        setTimeout(() => { if (toastEl) clampToastPosition(toastEl); }, 50);
       }
     });
   },
 });
-
