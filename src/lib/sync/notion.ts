@@ -229,30 +229,50 @@ export const notionAdapter: SyncAdapter<NotionConfig> = {
       if (id) existingByGleanId.set(id, page.id);
     }
 
-    for (let i = 0; i < cards.length; i++) {
-      const card = cards[i];
+    // Upsert pages with bounded concurrency (Notion limit ≈ 3 req/s).
+    // Single-item failures are collected but don't abort the batch.
+    const errors: string[] = [];
+    const CONCURRENCY = 3;
+
+    const upsertCard = async (card: Card): Promise<void> => {
       const properties = buildPageProperties(card);
       const existingId = existingByGleanId.get(card.id);
 
-      if (existingId) {
-        await notionFetch(config.token, `/pages/${existingId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ properties }),
-        });
-      } else {
-        await notionFetch(config.token, "/pages", {
-          method: "POST",
-          body: JSON.stringify({
-            parent: { database_id: database.id },
-            properties,
-          }),
-        });
+      try {
+        if (existingId) {
+          await notionFetch(config.token, `/pages/${existingId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ properties }),
+          });
+        } else {
+          await notionFetch(config.token, "/pages", {
+            method: "POST",
+            body: JSON.stringify({
+              parent: { database_id: database.id },
+              properties,
+            }),
+          });
+        }
+      } catch (err) {
+        errors.push(
+          `Card ${card.id}: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
+    };
 
-      // Small delay between writes to stay under Notion's rate limits.
-      if (i < cards.length - 1) {
-        await sleep(200);
-      }
+    // Bounded concurrency pool: process cards in chunks of CONCURRENCY.
+    for (let i = 0; i < cards.length; i += CONCURRENCY) {
+      const batch = cards.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(upsertCard));
+    }
+
+    if (errors.length > 0) {
+      return {
+        ok: true,
+        syncedAt: Date.now(),
+        databaseId: database.id,
+        error: `${errors.length} item(s) failed: ${errors.join("; ")}`,
+      };
     }
 
     return { ok: true, syncedAt: Date.now(), databaseId: database.id };

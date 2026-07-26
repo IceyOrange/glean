@@ -4,8 +4,11 @@ import {
   SyncProvider,
   SavedSyncConfig,
   ProviderConfig,
+  NotionConfig,
   WebDAVConfig,
   SyncResult,
+  isNotionConfig,
+  isWebDAVConfig,
   getSyncConfig,
   saveSyncConfig,
   makeDefaultConfig,
@@ -60,10 +63,10 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
     });
   };
 
-  const updateProviderConfig = (patch: Partial<ProviderConfig>) => {
+  const updateProviderConfig = (patch: Partial<Omit<NotionConfig, "provider">> | Partial<Omit<WebDAVConfig, "provider">>) => {
     setConfig((prev) => {
       if (!prev) return null;
-      const newConfig = { ...prev.config, ...patch };
+      const newConfig = { ...prev.config, ...patch } as ProviderConfig;
       const next = { ...prev, config: newConfig, providerConfigs: { ...prev.providerConfigs, [prev.provider]: newConfig } };
       void saveSyncConfig(next);
       return next;
@@ -109,7 +112,8 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
   };
 
   const handleSearchDatabases = async () => {
-    const token = (providerConfig as { token: string }).token?.trim();
+    if (!isNotionConfig(providerConfig)) return;
+    const token = providerConfig.token?.trim();
     if (!token) return;
     setDbSearchLoading(true);
     setDbSearchError(null);
@@ -135,8 +139,8 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
   const inputCls =
     "w-full px-3 py-2 text-sm bg-surface rounded-lg border border-line outline-none transition-shadow placeholder:text-ink-300 focus:border-seal/50 focus:ring-2 focus:ring-seal/20 text-ink-900";
 
-  const notionToken = (providerConfig as { token: string }).token ?? "";
-  const notionDbId = (providerConfig as { databaseId?: string }).databaseId ?? "";
+  const notionToken = isNotionConfig(providerConfig) ? providerConfig.token : "";
+  const notionDbId = isNotionConfig(providerConfig) ? (providerConfig.databaseId ?? "") : "";
 
   return (
     <div className="space-y-4">
@@ -290,13 +294,13 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
       )}
 
       {/* ─── WebDAV config ─── */}
-      {isWebDAVProvider(provider) && (
+      {isWebDAVProvider(provider) && isWebDAVConfig(providerConfig) && (
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-ink-600 mb-1">{tr("syncServerUrl")}</label>
             <input
               type="url"
-              value={(providerConfig as WebDAVConfig).serverUrl}
+              value={providerConfig.serverUrl}
               onChange={(e) => updateProviderConfig({ serverUrl: e.target.value })}
               className={inputCls}
             />
@@ -305,7 +309,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             <label className="block text-xs text-ink-600 mb-1">{tr("syncUsername")}</label>
             <input
               type="text"
-              value={(providerConfig as WebDAVConfig).username}
+              value={providerConfig.username}
               onChange={(e) => updateProviderConfig({ username: e.target.value })}
               className={inputCls}
             />
@@ -314,7 +318,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             <label className="block text-xs text-ink-600 mb-1">{tr("syncPassword")}</label>
             <input
               type="password"
-              value={(providerConfig as WebDAVConfig).password}
+              value={providerConfig.password}
               onChange={(e) => updateProviderConfig({ password: e.target.value })}
               className={inputCls}
             />
@@ -323,7 +327,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             <label className="block text-xs text-ink-600 mb-1">{tr("syncRemotePath")}</label>
             <input
               type="text"
-              value={(providerConfig as WebDAVConfig).remotePath}
+              value={providerConfig.remotePath}
               onChange={(e) => updateProviderConfig({ remotePath: e.target.value })}
               className={inputCls}
             />

@@ -29,14 +29,15 @@ const sampleCards: Card[] = [
 
 describe("notionAdapter", () => {
   it("validates missing token", () => {
-    expect(notionAdapter.validate({ token: "" })).toBe("Integration token is required");
-    expect(notionAdapter.validate({ token: "secret_xxx" })).toBeNull();
+    expect(notionAdapter.validate({ provider: "notion", token: "" })).toBe("Integration token is required");
+    expect(notionAdapter.validate({ provider: "notion", token: "secret_xxx" })).toBeNull();
   });
 });
 
 describe("webdavAdapter", () => {
   it("validates required fields", () => {
     expect(webdavAdapter.validate({
+      provider: "webdav",
       serverUrl: "",
       username: "user",
       password: "pass",
@@ -44,6 +45,7 @@ describe("webdavAdapter", () => {
     })).toBe("Server URL is required");
 
     expect(webdavAdapter.validate({
+      provider: "webdav",
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "",
       password: "pass",
@@ -51,6 +53,7 @@ describe("webdavAdapter", () => {
     })).toBe("Username is required");
 
     expect(webdavAdapter.validate({
+      provider: "webdav",
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "user",
       password: "",
@@ -58,6 +61,7 @@ describe("webdavAdapter", () => {
     })).toBe("Password is required");
 
     expect(webdavAdapter.validate({
+      provider: "webdav",
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "user",
       password: "pass",
@@ -65,6 +69,7 @@ describe("webdavAdapter", () => {
     })).toBe("Remote path is required");
 
     expect(webdavAdapter.validate({
+      provider: "webdav",
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "user",
       password: "pass",
@@ -90,6 +95,7 @@ describe("webdavAdapter.sync", () => {
     } as Response);
 
     const result = await webdavAdapter.sync(sampleCards, {
+      provider: "webdav",
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "tester",
       password: "app-password",
@@ -124,6 +130,7 @@ describe("webdavAdapter.sync", () => {
       .mockResolvedValue({ ok: true, status: 200, text: async () => "" } as Response);
 
     const result = await webdavAdapter.sync(sampleCards, {
+      provider: "webdav",
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "tester",
       password: "app-password",
@@ -150,7 +157,7 @@ describe("notionAdapter.sync", () => {
       json: async () => ({ results: [] }),
     } as Response);
 
-    const result = await notionAdapter.sync(sampleCards, { token: "secret_xxx" });
+    const result = await notionAdapter.sync(sampleCards, { provider: "notion", token: "secret_xxx" });
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain('No Notion database named "Glean"');
@@ -163,6 +170,20 @@ describe("notionAdapter.sync", () => {
         ok: true,
         json: async () => ({
           results: [{ id: "db-1", title: [{ plain_text: "Glean" }] }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        // ensureDatabaseProperties: GET /databases/db-1 — all required
+        // properties already present, so no PATCH is issued.
+        ok: true,
+        json: async () => ({
+          properties: {
+            "Glean ID": { type: "rich_text" },
+            Content: { type: "rich_text" },
+            Thought: { type: "rich_text" },
+            Source: { type: "url" },
+            Created: { type: "date" },
+          },
         }),
       } as Response)
       .mockResolvedValueOnce({
@@ -183,7 +204,7 @@ describe("notionAdapter.sync", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) } as Response) // update card-1
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) } as Response); // create card-2
 
-    const result = await notionAdapter.sync(sampleCards, { token: "secret_xxx" });
+    const result = await notionAdapter.sync(sampleCards, { provider: "notion", token: "secret_xxx" });
 
     expect(result.ok).toBe(true);
     const calls = vi.mocked(global.fetch).mock.calls;

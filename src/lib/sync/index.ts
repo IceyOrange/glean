@@ -1,5 +1,5 @@
 import { Card } from "@/lib/types";
-import { SyncResult } from "./types";
+import { SyncResult, isNotionConfig } from "./types";
 import { getAdapter } from "./registry";
 import { getSyncConfig, saveSyncConfig } from "./storage";
 
@@ -26,10 +26,10 @@ export async function syncCards(cards: Card[]): Promise<SyncResult> {
 
     // Persist a discovered Notion database id back into the config so future
     // syncs don't need to search for it again.
-    const nextConfig: typeof saved.config =
-      saved.provider === "notion" && result.databaseId
-        ? { ...(saved.config as { token: string; databaseId?: string }), databaseId: result.databaseId }
-        : saved.config;
+    let nextConfig = saved.config;
+    if (isNotionConfig(saved.config) && result.databaseId) {
+      nextConfig = { ...saved.config, databaseId: result.databaseId };
+    }
 
     await saveSyncConfig({
       ...saved,

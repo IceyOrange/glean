@@ -1,26 +1,20 @@
-import { SyncAdapter, SyncProviderMeta, SyncProvider, ProviderConfig } from "./types";
+import { SyncAdapter, SyncProviderMeta, SyncProvider, ProviderConfig, isNotionConfig, isWebDAVConfig } from "./types";
 import { notionAdapter } from "./notion";
 import { webdavAdapter } from "./webdav";
-
-const WEBDAV_DEFAULTS = {
-  serverUrl: "",
-  username: "",
-  password: "",
-  remotePath: "/Glean/",
-};
 
 export const SYNC_PROVIDERS: SyncProviderMeta[] = [
   {
     id: "notion",
     labelKey: "syncNotion",
     descriptionKey: "syncNotionDesc",
-    defaultConfig: { token: "" },
+    defaultConfig: { provider: "notion", token: "" },
   },
   {
     id: "nutstore",
     labelKey: "syncNutstore",
     descriptionKey: "syncNutstoreDesc",
     defaultConfig: {
+      provider: "nutstore",
       serverUrl: "https://dav.jianguoyun.com/dav/",
       username: "",
       password: "",
@@ -31,7 +25,13 @@ export const SYNC_PROVIDERS: SyncProviderMeta[] = [
     id: "webdav",
     labelKey: "syncWebdav",
     descriptionKey: "syncWebdavDesc",
-    defaultConfig: WEBDAV_DEFAULTS,
+    defaultConfig: {
+      provider: "webdav",
+      serverUrl: "",
+      username: "",
+      password: "",
+      remotePath: "/Glean/",
+    },
   },
 ];
 
@@ -48,8 +48,10 @@ export function getAdapter(provider: SyncProvider): SyncAdapter<ProviderConfig> 
     case "nutstore":
     case "webdav":
       return webdavAdapter as SyncAdapter<ProviderConfig>;
-    default:
-      throw new Error(`Unknown provider: ${provider}`);
+    default: {
+      const _exhaustive: never = provider;
+      throw new Error(`Unknown provider: ${_exhaustive}`);
+    }
   }
 }
 

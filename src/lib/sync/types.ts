@@ -16,19 +16,34 @@ export interface PullResult {
   databaseId?: string;
 }
 
+/** Notion provider config — discriminated by `provider: "notion"`. */
 export interface NotionConfig {
+  provider: "notion";
   token: string;
   databaseId?: string;
 }
 
+/** WebDAV / Nutstore provider config — discriminated by `provider: "webdav" | "nutstore"`. */
 export interface WebDAVConfig {
+  provider: "webdav" | "nutstore";
   serverUrl: string;
   username: string;
   password: string;
   remotePath: string;
 }
 
+/** Discriminated union of all provider configs. Use type guards to narrow. */
 export type ProviderConfig = NotionConfig | WebDAVConfig;
+
+/** Type guard: narrows ProviderConfig to NotionConfig. */
+export function isNotionConfig(config: ProviderConfig): config is NotionConfig {
+  return config.provider === "notion";
+}
+
+/** Type guard: narrows ProviderConfig to WebDAVConfig. */
+export function isWebDAVConfig(config: ProviderConfig): config is WebDAVConfig {
+  return config.provider === "webdav" || config.provider === "nutstore";
+}
 
 export interface SavedSyncConfig {
   provider: SyncProvider;
