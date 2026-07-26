@@ -15,7 +15,6 @@ export default defineConfig({
       },
     },
     host_permissions: [
-      "<all_urls>",
       "https://api.notion.com/*",
       "https://dav.jianguoyun.com/*",
       "https://api.deepseek.com/*",
@@ -25,12 +24,7 @@ export default defineConfig({
       "https://open.bigmodel.cn/*",
       "https://api.anthropic.com/*",
     ],
-    content_scripts: [
-      {
-        matches: ["<all_urls>"],
-        js: ["main-world-isolation.js"],
-        world: "MAIN",
-      },
-    ],
+    // content_scripts: removed — main-world-isolation prototype patches no
+    // longer needed; focus isolation handled inside shadow DOM (S3 fix).
   },
 });
