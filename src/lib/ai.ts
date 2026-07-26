@@ -1,5 +1,7 @@
 import { Card } from "./types";
 import { t, type Lang } from "./i18n";
+import { setSecret, getSecret, removeSecret } from "./secrets";
+import { createWriteQueue } from "./write-queue";
 
 export interface AIConfig {
   apiKey: string;
@@ -26,7 +28,11 @@ const ASK_HISTORY_KEY = "glean_ask_history";
 
 type AskHistoryCache = Record<string, AskExchange[]>;
 
-async function fetchWithRetry(
+// ── Write queue for ask-history (prevents read-modify-write races) ──
+const askHistoryQueue = createWriteQueue();
+
+/** @internal Exported for testing only. */
+export async function fetchWithRetry(
   url: string,
   options: RequestInit,
   retries = 1,
@@ -44,7 +50,8 @@ async function fetchWithRetry(
   }
 }
 
-async function formatAIError(response: Response): Promise<string> {
+/** @internal Exported for testing only. */
+export async function formatAIError(response: Response): Promise<string> {
   const text = await response.text();
   try {
     const data = JSON.parse(text);
@@ -56,7 +63,8 @@ async function formatAIError(response: Response): Promise<string> {
   return `AI API error: ${response.status} ${text}`;
 }
 
-async function callAI(
+/** @internal Exported for testing only. */
+export async function callAI(
   config: AIConfig,
   systemPrompt: string,
   userPrompt: string,
@@ -129,21 +137,50 @@ async function callAI(
   return content;
 }
 
+// ── S1: Encrypted AI config with plaintext migration ──────────────
+
 export async function getAIConfig(): Promise<AIConfig | null> {
+  // 1. Try encrypted read first
+  const encrypted = await getSecret<AIConfig>(CONFIG_KEY);
+  if (encrypted) return encrypted;
+
+  // 2. Fallback: check for legacy plaintext data and migrate
   try {
     const result = await chrome.storage.local.get(CONFIG_KEY);
-    return (result[CONFIG_KEY] as AIConfig) ?? null;
+    const plain = result[CONFIG_KEY];
+    // A valid plaintext AIConfig must be an object with at least `apiKey`
+    if (plain && typeof plain === "object" && typeof (plain as AIConfig).apiKey === "string") {
+      const config = plain as AIConfig;
+      // Attempt migration: encrypt then delete plaintext
+      try {
+        await setSecret(CONFIG_KEY, config);
+        await chrome.storage.local.remove(CONFIG_KEY);
+      } catch {
+        // Migration failed — return the plaintext value this time but don't delete it
+        // so we can retry on next read. Still better than losing the config.
+      }
+      return config;
+    }
   } catch {
-    return null;
+    // Plaintext read failed — nothing to migrate
   }
+
+  return null;
 }
 
 export async function saveAIConfig(config: AIConfig): Promise<void> {
-  await chrome.storage.local.set({ [CONFIG_KEY]: config });
+  await setSecret(CONFIG_KEY, config);
 }
 
 export async function clearAIConfig(): Promise<void> {
-  await chrome.storage.local.remove(CONFIG_KEY);
+  await removeSecret(CONFIG_KEY);
+  // Also clear any residual plaintext config left over from a failed
+  // encryption migration, otherwise getAIConfig would resurrect it on read.
+  try {
+    await chrome.storage.local.remove(CONFIG_KEY);
+  } catch {
+    // Storage already clear / unavailable — nothing to do.
+  }
 }
 
 /* ── Ask about a card ─────────────────────── */
@@ -159,25 +196,32 @@ export async function getAskHistory(cardId: string): Promise<AskExchange[]> {
 }
 
 export async function saveAskExchange(cardId: string, exchange: AskExchange): Promise<void> {
-  try {
-    const result = await chrome.storage.local.get(ASK_HISTORY_KEY);
-    const cache = (result[ASK_HISTORY_KEY] as AskHistoryCache) ?? {};
-    cache[cardId] = [...(cache[cardId] ?? []), exchange].slice(-20);
-    await chrome.storage.local.set({ [ASK_HISTORY_KEY]: cache });
-  } catch {
-    // Best-effort caching.
-  }
+  await askHistoryQueue(async () => {
+    try {
+      const result = await chrome.storage.local.get(ASK_HISTORY_KEY);
+      const cache = (result[ASK_HISTORY_KEY] as AskHistoryCache) ?? {};
+      cache[cardId] = [...(cache[cardId] ?? []), exchange].slice(-20);
+      await chrome.storage.local.set({ [ASK_HISTORY_KEY]: cache });
+    } catch (err) {
+      // Best-effort caching — don't interrupt the ask flow, but surface the
+      // failure so silent data loss is at least observable in the console.
+      console.warn("Glean: failed to persist ask exchange", err);
+    }
+  });
 }
 
 export async function deleteAskHistory(cardId: string): Promise<void> {
-  try {
-    const result = await chrome.storage.local.get(ASK_HISTORY_KEY);
-    const cache = (result[ASK_HISTORY_KEY] as AskHistoryCache) ?? {};
-    delete cache[cardId];
-    await chrome.storage.local.set({ [ASK_HISTORY_KEY]: cache });
-  } catch {
-    // Best-effort cleanup.
-  }
+  await askHistoryQueue(async () => {
+    try {
+      const result = await chrome.storage.local.get(ASK_HISTORY_KEY);
+      const cache = (result[ASK_HISTORY_KEY] as AskHistoryCache) ?? {};
+      delete cache[cardId];
+      await chrome.storage.local.set({ [ASK_HISTORY_KEY]: cache });
+    } catch (err) {
+      // Best-effort cleanup — surface failure without throwing.
+      console.warn("Glean: failed to delete ask history", err);
+    }
+  });
 }
 
 function formatCardForPrompt(c: Card, i: number): string {
@@ -223,6 +267,48 @@ export async function askAboutCard(
 
 /* ── Analyze mindset across cards ─────────── */
 
+/**
+ * Coerce a value into string[]. Wraps a bare string into [string],
+ * filters out non-string elements, returns null if nothing usable.
+ */
+/** @internal Exported for testing only. */
+export function coerceStringArray(value: unknown): string[] | null {
+  if (Array.isArray(value)) {
+    const filtered = value.filter((v): v is string => typeof v === "string");
+    return filtered.length > 0 ? filtered : null;
+  }
+  if (typeof value === "string") {
+    return [value];
+  }
+  return null;
+}
+
+/**
+ * Runtime-validate and coerce a parsed object into MindsetAnalysis.
+ * Throws with an i18n key if the shape is irrecoverable.
+ */
+export function validateMindsetAnalysis(raw: unknown, lang: Lang): MindsetAnalysis {
+  if (!raw || typeof raw !== "object") {
+    throw new Error(t("aiInvalidResponse", lang));
+  }
+  const obj = raw as Record<string, unknown>;
+
+  const themes = coerceStringArray(obj.themes);
+  const patterns = coerceStringArray(obj.patterns);
+  const connections = coerceStringArray(obj.connections);
+
+  let evolution: string | null = null;
+  if (typeof obj.evolution === "string" && obj.evolution.length > 0) {
+    evolution = obj.evolution;
+  }
+
+  if (!themes || !patterns || !connections || !evolution) {
+    throw new Error(t("aiInvalidResponse", lang));
+  }
+
+  return { themes, patterns, evolution, connections };
+}
+
 export async function analyzeMindset(
   config: AIConfig,
   cards: Card[],
@@ -253,28 +339,35 @@ export async function analyzeMindset(
 
   const content = await callAI(config, systemPrompt, userPrompt, true);
 
+  // Parse JSON with existing fallback extraction logic, then validate
+  let parsed: unknown;
   try {
-    return JSON.parse(content) as MindsetAnalysis;
+    parsed = JSON.parse(content);
   } catch {
     // Fallback: try to extract JSON from a markdown code block or surrounding text
     // (some models, especially Anthropic, may wrap JSON in ```json ... ```)
     const jsonMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
     if (jsonMatch) {
       try {
-        return JSON.parse(jsonMatch[1]) as MindsetAnalysis;
+        parsed = JSON.parse(jsonMatch[1]);
       } catch {
         // fall through
       }
     }
-    // Last resort: find the first { ... } block
-    const braceMatch = content.match(/\{[\s\S]*\}/);
-    if (braceMatch) {
-      try {
-        return JSON.parse(braceMatch[0]) as MindsetAnalysis;
-      } catch {
-        // fall through
+    if (parsed === undefined) {
+      // Last resort: find the first { ... } block
+      const braceMatch = content.match(/\{[\s\S]*\}/);
+      if (braceMatch) {
+        try {
+          parsed = JSON.parse(braceMatch[0]);
+        } catch {
+          throw new Error(t("aiInvalidResponse", lang));
+        }
+      } else {
+        throw new Error(t("aiInvalidResponse", lang));
       }
     }
-    throw new Error("Invalid AI response format");
   }
+
+  return validateMindsetAnalysis(parsed, lang);
 }
