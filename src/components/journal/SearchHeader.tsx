@@ -1,5 +1,5 @@
 import { ReactNode, RefObject, useState, useEffect, useRef } from "react";
-import { ArrowLeft, Search, Settings, X, Brain, MoreHorizontal, Download, CheckSquare, Diamond, Upload, Trash2 } from "lucide-react";
+import { ArrowLeft, Search, Settings, X, Brain, MoreHorizontal, Download, CheckSquare, Diamond, Upload, Trash2, RefreshCw } from "lucide-react";
 
 interface SearchHeaderProps {
   query: string;
@@ -18,6 +18,9 @@ interface SearchHeaderProps {
   onOpenSettings: () => void;
   onImport: () => void;
   onOpenTrash: () => void;
+  showSync: boolean;
+  syncing: boolean;
+  onSync: () => void;
   activeFilter: "all" | "noThought" | "recent";
   onFilterChange: (filter: "all" | "noThought" | "recent") => void;
   title: string;
@@ -37,6 +40,7 @@ interface SearchHeaderProps {
   clearSearchLabel: string;
   importLabel: string;
   trashLabel: string;
+  syncLabel: string;
   filterLabel: string;
   filterOptions: Record<"all" | "noThought" | "recent", string>;
   /** Number of matching cards while searching. */
@@ -63,6 +67,9 @@ export function SearchHeader({
   onOpenSettings,
   onImport,
   onOpenTrash,
+  showSync,
+  syncing,
+  onSync,
   activeFilter,
   onFilterChange,
   title,
@@ -80,6 +87,7 @@ export function SearchHeader({
   clearSearchLabel,
   importLabel,
   trashLabel,
+  syncLabel,
   filterLabel,
   filterOptions,
   resultCount,
@@ -173,6 +181,17 @@ export function SearchHeader({
           )}
 
           <div className="flex items-center gap-0.5 shrink-0 ml-auto">
+            {showSync && (
+              <button
+                onClick={onSync}
+                disabled={syncing}
+                className="relative min-w-9 min-h-9 inline-flex items-center justify-center rounded-lg text-ink-400 transition-colors hover:text-seal disabled:cursor-wait disabled:opacity-60"
+                title={syncLabel}
+                aria-label={syncLabel}
+              >
+                <RefreshCw size={16} className={syncing ? "animate-spin" : ""} />
+              </button>
+            )}
             {canAnalyzeMindset && (
               <button
                 onClick={onAnalyzeMindset}

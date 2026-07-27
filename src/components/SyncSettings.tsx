@@ -17,6 +17,7 @@ import {
   getProviderMeta,
   getAdapter,
   requestSync,
+  syncPermissionUrl,
   isWebDAVProvider,
   searchDatabases,
   searchGists,
@@ -131,12 +132,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
       return;
     }
 
-    const endpoint = isNotionConfig(config.config)
-      ? "https://api.notion.com"
-      : isGistConfig(config.config)
-        ? "https://api.github.com"
-        : config.config.serverUrl;
-    if (!(await ensureOriginPermission(endpoint))) {
+    if (!(await ensureOriginPermission(syncPermissionUrl(config.config)))) {
       setResult({ ok: false, error: tr("permissionDenied") });
       return;
     }

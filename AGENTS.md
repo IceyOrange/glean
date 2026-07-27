@@ -1,13 +1,13 @@
 <claude-mem-context>
 # Memory Context
 
-# [Glean] recent context, 2026-07-27 5:24pm GMT+8
+# [Glean] recent context, 2026-07-27 6:34pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (11,038t read) | 5,683,204t work | 100% savings
+Stats: 50 obs (10,241t read) | 5,484,895t work | 100% savings
 
 ### Jul 1, 2026
 S4050 Quotation hover window has positioning, navigation, and content redundancy issues (Jul 1 at 6:09 PM)
@@ -16,22 +16,7 @@ S4024 Fix Glean extension quote popover: wrong position, broken page display aft
 S4051 Fix quotation floating window position, post-click page rendering, and redundant original-text display (Jul 4 at 1:24 PM)
 S4352 Project-wide animation optimization in progress (Jul 4 at 1:24 PM)
 ### Jul 27, 2026
-S4355 SettingsPanel Switch toggle for auto-thought setting reported as visually unappealing (Jul 27 at 2:44 PM)
-5088 4:15p 🔵 Glean project architecture and feature baseline mapped
-5089 4:18p 🔵 Glean secrets module uses AES-GCM obfuscation for chrome.storage.local
-5090 " 🔵 Glean card storage uses soft-delete tombstones with a write queue and cache
-5091 " 🔵 Glean sync engine supports Notion, WebDAV, Nutstore, and GitHub Gist
-5092 4:19p ✅ Project review plan advanced to test/build/scan phase
-5093 " 🔵 Test suite and production build pass cleanly
-5094 " 🔵 Impeccable scan flags width/height transitions causing layout thrash
-5095 4:21p 🔵 Comprehensive Glean browser extension audit initiated
-5096 4:22p 🔵 Glean extension build output and manifest inspected
-5097 " 🔵 Locale and theme initialization patterns identified
-5098 4:23p ✅ Browser-based audit fixtures created for journal UI review
-5100 4:29p 🔵 Browser runtime reconnected for Glean UI inspection
-5101 4:31p 🔵 Local audit server at 127.0.0.1:4173 refused connection
-5102 " ✅ Static preview server restarted on 127.0.0.1:4173
-5103 " ✅ Impeccable live detection server started on localhost:4174
+S4355 SettingsPanel Switch toggle for auto-thought setting reported as visually unappealing (Jul 27 at 2:09 PM)
 5104 4:32p 🔵 Browser Use URL policy blocks local 127.0.0.1:4173 navigation
 5106 4:34p 🔵 Impeccable detected 5 UI anti-patterns on audit-human.html
 5107 4:36p 🔵 Screenshot captured of Impeccable anti-pattern overlays on audit-human.html
@@ -67,6 +52,34 @@ S4355 SettingsPanel Switch toggle for auto-thought setting reported as visually 
 5145 " ✅ Storage tests expanded to cover trash and JSON import
 5147 " 🔵 Built manifest confirms minimal install-time permissions with optional host access
 5149 " 🔄 Removed unused pulse state and ref from popup App.tsx
+5151 5:26p 🔵 Remote main has diverged ahead of local working tree
+5152 5:27p 🔵 Rebase blocked by unstaged AGENTS.md changes
+5153 " ✅ AGENTS.md timestamp updated by memory context refresh
+5155 5:28p ✅ Local commits pushed to origin/main after build hook
+5156 " 🔵 Release workflow will skip next bump because head commit is a feature
+5158 5:31p 🟣 Glean v0.2.20 released with Chrome and Firefox artifacts
+5159 6:04p 🔴 Glean browser extension still shows old version after browser refresh
+5160 6:17p 🔵 Glean extension has stale chrome-mv3-dev build alongside current production build
+5163 6:19p 🔵 Remote main has no new commits beyond local 0.2.19
+5165 6:21p 🔵 Local main lags behind GitHub remote main by unknown commits
+5166 " 🔵 Local origin/main remote-tracking branch is stale
+5167 6:22p 🔴 Local Glean extension rebuilt to version 0.2.20 after syncing remote main
+5168 " ⚖️ Delivery rule added to AGENTS.md for extension release workflow
+5170 6:28p 🟣 Recycle bin Notion sync inquiry
+5171 6:32p 🟣 Notion sync refresh button requested for journal.html
+S4381 Implement bidirectional trash/recycle-bin synchronization between Glean and Notion (Jul 27 at 6:33 PM)
+**Investigated**: Current deletion and restore flow between Glean and Notion, including how archived pages propagate and what happens on restore.
 
-Access 5683k tokens of past work via get_observations([IDs]) or mem-search skill.
+**Learned**: Glean-to-Notion deletion already archives the Notion page. Notion-to-Glean deletion already moves the card to local trash. However, restoring a card in Glean currently creates a new Notion page instead of unarchiving the original because the Glean card ID ↔ Notion page ID mapping is lost after archival. Notion API does not expose reliable permanent page deletion, so "permanent delete" in Glean can only remove the local tombstone.
+
+**Completed**: Analyzed the existing partial sync behavior and identified the missing mapping/persistence needed for true bidirectional restore.
+
+**Next Steps**: Implement persistence of the Glean card ID ↔ Notion page ID mapping through deletion, and on Glean restore call Notion PATCH /pages/{id} with { "archived": false } to unarchive the same page; align permanent-delete semantics so Notion pages remain in Notion trash.
+
+
+Access 5485k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
+
+## Delivery rule
+
+每次完成可交付改动时，必须依序完成：同步远端 `main`、执行本地生产构建、推送并确认线上发布成功、拉取发布工作流自动生成的版本提交、再次执行本地生产构建，并核对 `.output/chrome-mv3/manifest.json` 与 `package.json` 的版本一致。浏览器本地加载目录固定为 `.output/chrome-mv3`，不要使用过期的 `.output/chrome-mv3-dev`。

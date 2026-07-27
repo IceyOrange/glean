@@ -1,5 +1,5 @@
 import { Card } from "@/lib/types";
-import { SyncResult, PullResult, isNotionConfig, isGistConfig } from "./types";
+import { SyncResult, PullResult, ProviderConfig, isNotionConfig, isGistConfig } from "./types";
 import { getAdapter } from "./registry";
 import { getSyncConfig, saveSyncConfig } from "./storage";
 import { saveAllCards, pruneTombstones } from "@/lib/storage";
@@ -12,6 +12,19 @@ export { mergeCards } from "./merge";
 export { notionAdapter, searchDatabases } from "./notion";
 export { webdavAdapter } from "./webdav";
 export { gistAdapter, searchGists } from "./gist";
+
+/** The one remote origin needed by a configured provider. */
+export function syncPermissionUrl(config: ProviderConfig): string {
+  switch (config.provider) {
+    case "notion":
+      return "https://api.notion.com";
+    case "gist":
+      return "https://api.github.com";
+    case "nutstore":
+    case "webdav":
+      return config.serverUrl;
+  }
+}
 
 // `syncCards` remains the pure-ish worker used by tests. Production callers
 // go through the background service worker (`requestSync`), which is the only

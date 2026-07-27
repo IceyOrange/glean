@@ -13,6 +13,8 @@ import {
   analyzeMindset,
   type MindsetAnalysis,
 } from "@/lib/ai";
+import { getAdapter, getSyncConfig, requestSync, syncPermissionUrl, type SavedSyncConfig } from "@/lib/sync";
+import { ensureOriginPermission } from "@/lib/permissions";
 import { getLang, setLang, t, type Lang } from "@/lib/i18n";
 import { siteName } from "@/lib/ui";
 import { SearchHeader } from "@/components/journal/SearchHeader";
@@ -75,6 +77,9 @@ export default function App() {
   const [showTrash, setShowTrash] = useState(false);
   const [deletedCards, setDeletedCards] = useState<Card[]>([]);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [syncConfig, setSyncConfig] = useState<SavedSyncConfig | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [lang, setLangState] = useState<Lang>("zh");
   const searchRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -103,6 +108,30 @@ export default function App() {
   useEffect(() => {
     getLang().then(setLangState);
   }, []);
+
+  const refreshSyncConfig = useCallback(async () => {
+    const saved = await getSyncConfig();
+    if (!saved?.enabled) {
+      setSyncConfig(null);
+      return;
+    }
+    try {
+      setSyncConfig(getAdapter(saved.provider).validate(saved.config) === null ? saved : null);
+    } catch {
+      setSyncConfig(null);
+    }
+  }, []);
+
+  // Keep the toolbar in sync when configuration is changed from the Settings
+  // modal or another extension surface.
+  useEffect(() => {
+    void refreshSyncConfig();
+    const onStorageChange = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === "local" && changes.glean_sync_config) void refreshSyncConfig();
+    };
+    chrome.storage.onChanged.addListener(onStorageChange);
+    return () => chrome.storage.onChanged.removeListener(onStorageChange);
+  }, [refreshSyncConfig]);
 
   // Deep link: journal.html#<cardId> expands and scrolls to that card.
   useEffect(() => {
@@ -283,6 +312,25 @@ export default function App() {
   const handleExport = useCallback((format: "md" | "json") => {
     exportCards(format, cards);
   }, [cards, exportCards]);
+
+  const handleSync = useCallback(async () => {
+    if (!syncConfig || syncing) return;
+    if (!(await ensureOriginPermission(syncPermissionUrl(syncConfig.config)))) {
+      setSyncMessage(tr("permissionDenied"));
+      return;
+    }
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const result = await requestSync();
+      setSyncMessage(result.ok ? tr("syncSuccess") : tr("syncLastError", { error: result.error ?? tr("genFail") }));
+    } catch (error) {
+      setSyncMessage(tr("syncLastError", { error: error instanceof Error ? error.message : tr("genFail") }));
+    } finally {
+      setSyncing(false);
+      void refreshSyncConfig();
+    }
+  }, [syncConfig, syncing, tr, refreshSyncConfig]);
 
   const openTrash = useCallback(async () => {
     setDeletedCards(await getDeletedCards());
@@ -487,6 +535,9 @@ export default function App() {
         onOpenSettings={() => setShowSettings(true)}
         onImport={() => importRef.current?.click()}
         onOpenTrash={() => void openTrash()}
+        showSync={!!syncConfig}
+        syncing={syncing}
+        onSync={() => void handleSync()}
         activeFilter={filter}
         onFilterChange={setFilter}
         title={tr("title")}
@@ -512,6 +563,7 @@ export default function App() {
         clearSearchLabel={tr("clearSearch")}
         importLabel={tr("importJSON")}
         trashLabel={tr("trash")}
+        syncLabel={tr("syncNow")}
         filterLabel={tr("filter")}
         filterOptions={{ all: tr("filterAll"), noThought: tr("filterNoThought"), recent: tr("filterRecent") }}
         resultCount={filtered.length}
@@ -539,6 +591,9 @@ export default function App() {
 
       {importMessage && (
         <p className="mx-auto mt-3 max-w-[720px] px-6 text-xs text-ink-600" role="status">{importMessage}</p>
+      )}
+      {syncMessage && (
+        <p className="mx-auto mt-3 max-w-[720px] px-6 text-xs text-ink-600" role="status">{syncMessage}</p>
       )}
 
       <main className="max-w-[720px] mx-auto px-4 sm:px-6 pt-3 pb-24 animate-fade-up">
