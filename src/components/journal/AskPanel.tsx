@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import type { AskExchange } from "@/lib/ai";
-import { Send, MessageCircleQuestion, ChevronUp, RefreshCw } from "lucide-react";
+import type { AskExchange, AskScope } from "@/lib/ai";
+import { Send, MessageCircleQuestion, ChevronUp } from "lucide-react";
 
 interface AskPanelProps {
   exchanges: AskExchange[];
@@ -14,7 +14,9 @@ interface AskPanelProps {
   retryLabel: string;
   emptyHint: string;
   errorHint: string;
-  onAsk: (question: string) => void;
+  scopeLabel: string;
+  scopeOptions: Record<AskScope, string>;
+  onAsk: (question: string, scope: AskScope) => void;
   onCollapse: () => void;
 }
 
@@ -30,11 +32,14 @@ export function AskPanel({
   retryLabel,
   emptyHint,
   errorHint,
+  scopeLabel,
+  scopeOptions,
   onAsk,
   onCollapse,
 }: AskPanelProps) {
   const [question, setQuestion] = useState("");
   const [failedQuestion, setFailedQuestion] = useState<string | null>(null);
+  const [scope, setScope] = useState<AskScope>("related");
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -56,13 +61,13 @@ export function AskPanel({
     if (!trimmed || loading) return;
     setQuestion("");
     setFailedQuestion(trimmed);
-    onAsk(trimmed);
+    onAsk(trimmed, scope);
   };
 
   const handleRetry = () => {
     const q = failedQuestion;
     if (!q) return;
-    onAsk(q);
+    onAsk(q, scope);
   };
 
   return (
@@ -101,7 +106,11 @@ export function AskPanel({
         )}
 
         {exchanges.map((ex, i) => (
-          <div key={i} className="space-y-1.5">
+          <div
+            key={i}
+            className="animate-journal-card-reveal space-y-1.5"
+            style={{ animationDelay: `${i * 40}ms` }}
+          >
             <div className="flex items-start gap-2">
               <span className="shrink-0 text-[10px] font-semibold text-seal mt-0.5">
                 Q
@@ -122,9 +131,10 @@ export function AskPanel({
         ))}
 
         {loading && (
-          <div className="flex items-center gap-2 text-xs text-ink-400 py-2">
-            <RefreshCw size={12} className="animate-spin" />
-            <span>{loadingLabel}</span>
+          <div className="space-y-2 py-2">
+            <div className="h-3 rounded w-5/6 animate-shimmer" />
+            <div className="h-3 rounded w-4/6 animate-shimmer" />
+            <div className="h-3 rounded w-3/6 animate-shimmer" />
           </div>
         )}
 
@@ -145,9 +155,16 @@ export function AskPanel({
         )}
       </div>
 
+      <div className="mb-2 flex items-center gap-2">
+        <label htmlFor="ask-scope" className="text-[11px] text-ink-500">{scopeLabel}</label>
+        <select id="ask-scope" value={scope} onChange={(event) => setScope(event.target.value as AskScope)} className="min-h-8 rounded-md border border-line bg-paper px-2 text-[11px] text-ink-700 outline-none focus:border-seal/50 focus:ring-2 focus:ring-seal/20">
+          {(Object.keys(scopeOptions) as AskScope[]).map((value) => <option key={value} value={value}>{scopeOptions[value]}</option>)}
+        </select>
+      </div>
       <form onSubmit={handleSubmit} className="flex items-center gap-2">
         <input
           ref={inputRef}
+          aria-label={placeholder}
           type="text"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
@@ -158,7 +175,7 @@ export function AskPanel({
         <button
           type="submit"
           disabled={!question.trim() || loading}
-          className="shrink-0 p-2 rounded-lg bg-ink-900 text-paper hover:bg-ink-800 disabled:opacity-40 disabled:hover:bg-ink-900 transition-colors"
+          className="shrink-0 p-2 rounded-lg bg-ink-900 text-paper hover:bg-ink-800 disabled:opacity-40 disabled:hover:bg-ink-900 active:scale-[0.97] transition-[background-color,opacity,transform] duration-150 ease-out-quint"
           title={submitLabel}
           aria-label={submitLabel}
         >

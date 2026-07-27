@@ -1,6 +1,6 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useRef } from "react";
 import type { Card } from "@/lib/types";
-import type { AskExchange } from "@/lib/ai";
+import type { AskExchange, AskScope } from "@/lib/ai";
 import { t, type Lang } from "@/lib/i18n";
 import { highlight, siteColor, siteName } from "@/lib/ui";
 import { formatPublishedDate } from "@/lib/utils";
@@ -42,7 +42,7 @@ interface CardItemProps {
   onExpand: (id: string) => void;
   onDelete: (id: string) => void;
   onToggleAsk: (id: string) => void;
-  onAsk: (id: string, question: string) => void;
+  onAsk: (id: string, question: string, scope: AskScope) => void;
   onSaveThought: (id: string, thought: string) => void;
   onStartEditingThought: (id: string) => void;
   onStopEditingThought: () => void;
@@ -71,30 +71,31 @@ export const CardItem = memo(function CardItem({
   onStopEditingThought,
 }: CardItemProps) {
   const shiftRef = useRef(false);
-  const quoteRef = useRef<HTMLParagraphElement>(null);
-  const thoughtPreviewRef = useRef<HTMLParagraphElement>(null);
-  const [isClamped, setIsClamped] = useState(false);
   const site = siteName(card.source);
   const titleText = citationTitle(card.source.title, site, card.source.author);
   const tr = (key: string, vars?: Record<string, string | number>) => t(key, lang, vars);
 
-  // Only make the card clickable when the quote or thought preview is actually
-  // clamped, or when it's already expanded (so it can be collapsed).
-  useEffect(() => {
-    const quoteEl = quoteRef.current;
-    const thoughtEl = thoughtPreviewRef.current;
-    const quoteClamped = !expanded && !!quoteEl && quoteEl.scrollHeight > quoteEl.clientHeight;
-    const thoughtClamped = !expanded && !!thoughtEl && thoughtEl.scrollHeight > thoughtEl.clientHeight;
-    setIsClamped(quoteClamped || thoughtClamped);
-  }, [expanded, card.content, card.thought, query]);
+  const quoteClickable = !selectionMode;
 
-  const clickable = !selectionMode && (expanded || isClamped || !card.thought);
+  // A click that ends with text selected was an attempt to copy, not to
+  // expand/collapse — ignore it.
+  const hasTextSelection = () => {
+    const sel = window.getSelection();
+    return !!sel && sel.toString().length > 0;
+  };
+
+  // Save only when the text actually changed — updateCard bumps updatedAt,
+  // and a no-op save would look like a fresh edit to the sync layer.
+  const commitThought = (value: string) => {
+    if (value !== (card.thought ?? "")) onSaveThought(card.id, value);
+    else onStopEditingThought();
+  };
 
   return (
     <article
       id={`card-${card.id}`}
-      className={`group scroll-mt-24 border-b border-line-soft py-6 transition-colors duration-200 ease-out last:border-b-0 ${
-        selected ? "bg-seal/[0.04]" : ""
+      className={`group scroll-mt-24 border-b border-line-soft py-6 transition-colors duration-200 ease-out last:border-b-0 [content-visibility:auto] [contain-intrinsic-size:auto_190px] ${
+        selected ? "bg-seal/[0.04] hover:bg-seal/[0.06]" : "hover:bg-surface/40"
       } ${selectionMode ? "cursor-pointer" : ""}`}
       onClick={selectionMode ? () => onToggleSelection(card.id) : undefined}
     >
@@ -108,8 +109,8 @@ export const CardItem = memo(function CardItem({
             className={`mt-1 shrink-0 rounded p-0.5 transition-colors ${
               selected ? "text-seal" : "text-ink-300 hover:text-ink-600"
             }`}
-            title={selected ? tr("deselectAll") : tr("selectAll")}
-            aria-label={selected ? tr("deselectAll") : tr("selectAll")}
+            title={selected ? tr("deselectCard") : tr("selectCard")}
+            aria-label={selected ? tr("deselectCard") : tr("selectCard")}
           >
             {selected ? <Check size={16} /> : <Square size={16} />}
           </button>
@@ -124,34 +125,69 @@ export const CardItem = memo(function CardItem({
             “
           </span>
 
-          {/* Quote */}
+          {/* Quote — always visible; line-clamped to 3 lines when collapsed,
+              click to expand the full text. (Never wrap this in the 0fr/1fr
+              collapse grid — that hides the quote entirely.) */}
           <div
-            className={clickable ? "cursor-pointer" : ""}
+            className={quoteClickable ? "cursor-pointer rounded outline-none focus-visible:ring-2 focus-visible:ring-seal/40" : ""}
+            role={quoteClickable ? "button" : undefined}
+            tabIndex={quoteClickable ? 0 : undefined}
+            aria-expanded={quoteClickable ? expanded : undefined}
             onClick={
-              clickable
+              quoteClickable
                 ? () => {
+                    if (hasTextSelection()) return;
                     onExpand(card.id);
-                    onStopEditingThought();
                   }
                 : undefined
             }
+            onKeyDown={(event) => {
+              if (!quoteClickable || (event.key !== "Enter" && event.key !== " ")) return;
+              event.preventDefault();
+              onExpand(card.id);
+            }}
           >
             <p
-              ref={quoteRef}
-              className={`font-quote text-[15px] text-ink-900 leading-[1.9] ${expanded ? "" : "line-clamp-3"}`}
+              className={`font-quote text-[15px] text-ink-900 leading-[1.75] ${
+                expanded ? "" : "line-clamp-3"
+              }`}
             >
               {highlight(card.content, query)}
               <span className="text-seal/40 ml-[2px]">”</span>
             </p>
           </div>
 
-          {/* Thought preview — collapsed */}
+          {/* Thought preview — collapsed. Always clickable: expands the card
+              straight into thought editing, so a thought is editable in every
+              card state (even short-quote + short-thought, which has nothing
+              clamped). In selection mode it stays inert so the click bubbles
+              up and toggles selection like the rest of the card. */}
           {!expanded && card.thought && (
             <div className="mt-2.5 flex items-start gap-1.5">
               <PenLine size={11} className="text-ochre/70 mt-[4px] shrink-0" />
               <p
-                ref={thoughtPreviewRef}
-                className="font-quote italic text-[13px] text-ink-600 leading-relaxed line-clamp-1"
+                onClick={
+                  selectionMode
+                    ? undefined
+                    : () => {
+                        onExpand(card.id);
+                        onStartEditingThought(card.id);
+                      }
+                }
+                title={selectionMode ? undefined : tr("editThought")}
+                role={selectionMode ? undefined : "button"}
+                tabIndex={selectionMode ? undefined : 0}
+                onKeyDown={(event) => {
+                  if (selectionMode || (event.key !== "Enter" && event.key !== " ")) return;
+                  event.preventDefault();
+                  onExpand(card.id);
+                  onStartEditingThought(card.id);
+                }}
+                className={`font-quote italic text-[13px] text-ink-600 leading-relaxed line-clamp-1 ${
+                  selectionMode
+                    ? ""
+                    : "cursor-pointer rounded -mx-1 px-1 transition-colors hover:text-ink-800 hover:bg-ochre/5"
+                }`}
               >
                 {highlight(card.thought, query)}
               </p>
@@ -173,98 +209,101 @@ export const CardItem = memo(function CardItem({
             </button>
           )}
 
-          {/* Thought — expanded (margin-note style) */}
+          {/* Thought — expanded */}
           {expanded && (
-            <div className="mt-4 border-l-2 border-ochre/40 pl-4">
-              {editingThoughtId === card.id ? (
-                <textarea
-                  autoFocus
-                  defaultValue={card.thought || ""}
-                  className="w-full font-quote italic text-[13px] text-ink-900 leading-relaxed bg-surface resize-none outline-none border border-line rounded-lg px-3 py-2 transition-shadow focus:border-seal/50 focus:ring-2 focus:ring-seal/20"
-                  rows={3}
-                  onBlur={(e) => onSaveThought(card.id, e.target.value)}
-                  onKeyDown={(e) => {
-                    shiftRef.current = e.shiftKey;
-                    const isEnter = e.key === "Enter" || e.keyCode === 13 || e.code === "Enter";
-                    if (isEnter && e.shiftKey) {
-                      return;
-                    }
-                    if (isEnter && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onSaveThought(card.id, e.currentTarget.value);
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onStopEditingThought();
-                    }
-                  }}
-                  onKeyUp={() => {
-                    shiftRef.current = false;
-                  }}
-                  onBeforeInput={(e) => {
-                    const ie = e.nativeEvent as InputEvent;
-                    const isLineBreak =
-                      ie.inputType === "insertLineBreak" ||
-                      ie.inputType === "insertParagraph";
-                    if (isLineBreak && !shiftRef.current && !ie.isComposing) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onSaveThought(card.id, e.currentTarget.value);
-                    }
-                  }}
-                  onInput={(e) => {
-                    const target = e.currentTarget;
-                    const ie = e.nativeEvent as InputEvent;
-                    if (
-                      target.value.endsWith("\n") &&
-                      !ie.isComposing &&
-                      !shiftRef.current
-                    ) {
-                      e.preventDefault?.();
-                      e.stopPropagation?.();
-                      target.value = target.value.slice(0, -1);
-                      onSaveThought(card.id, target.value);
-                    }
-                  }}
-                />
-              ) : card.thought ? (
-                <div className="flex items-start gap-2">
-                  <p
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onStartEditingThought(card.id);
+            <div>
+              <div className="mt-4 rounded-xl bg-surface/70 px-4 py-3">
+                {editingThoughtId === card.id ? (
+                  <textarea
+                    autoFocus
+                    defaultValue={card.thought || ""}
+                    className="w-full font-quote italic text-[13px] text-ink-900 leading-relaxed bg-paper resize-none outline-none border border-line rounded-lg px-3 py-2 transition-shadow focus:border-seal/50 focus:ring-2 focus:ring-seal/20"
+                    rows={3}
+                    onBlur={(e) => commitThought(e.target.value)}
+                    onKeyDown={(e) => {
+                      shiftRef.current = e.shiftKey;
+                      const isEnter = e.key === "Enter" || e.keyCode === 13 || e.code === "Enter";
+                      if (isEnter && e.shiftKey) {
+                        return;
+                      }
+                      if (isEnter && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        commitThought(e.currentTarget.value);
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onStopEditingThought();
+                      }
                     }}
-                    title={tr("editThought")}
-                    className="font-quote italic text-[13px] text-ink-700 leading-relaxed flex-1 whitespace-pre-wrap cursor-text rounded -mx-1 px-1 py-0.5 transition-colors hover:bg-ochre/5"
-                  >
-                    {highlight(card.thought, query)}
-                  </p>
+                    onKeyUp={() => {
+                      shiftRef.current = false;
+                    }}
+                    onBeforeInput={(e) => {
+                      const ie = e.nativeEvent as InputEvent;
+                      const isLineBreak =
+                        ie.inputType === "insertLineBreak" ||
+                        ie.inputType === "insertParagraph";
+                      if (isLineBreak && !shiftRef.current && !ie.isComposing) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        commitThought(e.currentTarget.value);
+                      }
+                    }}
+                    onInput={(e) => {
+                      const target = e.currentTarget;
+                      const ie = e.nativeEvent as InputEvent;
+                      if (
+                        target.value.endsWith("\n") &&
+                        !ie.isComposing &&
+                        !shiftRef.current
+                      ) {
+                        e.preventDefault?.();
+                        e.stopPropagation?.();
+                        target.value = target.value.slice(0, -1);
+                        commitThought(target.value);
+                      }
+                    }}
+                  />
+                ) : card.thought ? (
+                  <div className="flex items-start gap-2">
+                    <PenLine size={11} className="text-ochre/70 mt-[4px] shrink-0" />
+                    <p
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStartEditingThought(card.id);
+                      }}
+                      title={tr("editThought")}
+                      className="font-quote italic text-[13px] text-ink-700 leading-relaxed flex-1 whitespace-pre-wrap cursor-text rounded -mx-1 px-1 py-0.5 transition-colors hover:bg-ochre/5"
+                    >
+                      {highlight(card.thought, query)}
+                    </p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStartEditingThought(card.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 min-w-7 min-h-7 inline-flex items-center justify-center text-ink-300 hover:text-ink-600 transition-[opacity,color] duration-200 ease-out-quart shrink-0"
+                      title={tr("editThought")}
+                      aria-label={tr("editThought")}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
+                ) : (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       onStartEditingThought(card.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-ink-300 hover:text-ink-600 transition-all p-1 shrink-0"
-                    title={tr("editThought")}
-                    aria-label={tr("editThought")}
+                    className="flex items-center gap-1.5 text-xs text-ink-500 hover:text-seal transition-colors py-1"
                   >
-                    <Pencil size={12} />
+                    <PenLine size={11} />
+                    {tr("addThought")}
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onStartEditingThought(card.id);
-                  }}
-                  className="flex items-center gap-1.5 text-xs text-ink-500 hover:text-seal transition-colors py-1"
-                >
-                  <PenLine size={11} />
-                  {tr("addThought")}
-                </button>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -293,7 +332,7 @@ export const CardItem = memo(function CardItem({
                 <span className="truncate">{site}</span>
                 <ArrowUpRight
                   size={9}
-                  className="shrink-0 opacity-70 relative -top-0.5 transition-transform duration-200 group-hover:translate-x-[1px] group-hover:-translate-y-[1px]"
+                  className="shrink-0 opacity-70 relative -top-0.5 transition-transform duration-200 ease-out-quart group-hover:translate-x-[1px] group-hover:-translate-y-[1px]"
                 />
               </a>
               {titleText && (
@@ -333,7 +372,7 @@ export const CardItem = memo(function CardItem({
                 className={`flex items-center gap-0.5 transition-opacity duration-200 ${
                   askOpen
                     ? "opacity-100"
-                    : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+                    : "opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100"
                 }`}
               >
                 <button
@@ -341,7 +380,7 @@ export const CardItem = memo(function CardItem({
                     e.stopPropagation();
                     onToggleAsk(card.id);
                   }}
-                  className={`transition-colors p-1 rounded ${
+                  className={`min-w-7 min-h-7 inline-flex items-center justify-center transition-colors rounded ${
                     askOpen ? "text-seal" : "text-ink-300 hover:text-seal"
                   }`}
                   title={tr("askAboutThis")}
@@ -354,7 +393,7 @@ export const CardItem = memo(function CardItem({
                     e.stopPropagation();
                     onDelete(card.id);
                   }}
-                  className="text-ink-300 hover:text-seal transition-colors p-1 rounded"
+                  className="min-w-7 min-h-7 inline-flex items-center justify-center text-ink-300 hover:text-seal transition-colors rounded"
                   title={tr("delete")}
                   aria-label={tr("delete")}
                 >
@@ -378,7 +417,9 @@ export const CardItem = memo(function CardItem({
               retryLabel={tr("askRetry")}
               emptyHint={tr("askEmptyHint")}
               errorHint={tr("askErrorHint")}
-              onAsk={(question) => onAsk(card.id, question)}
+              scopeLabel={tr("askScope")}
+              scopeOptions={{ card: tr("askScopeCard"), related: tr("askScopeRelated"), library: tr("askScopeLibrary") }}
+              onAsk={(question, scope) => onAsk(card.id, question, scope)}
               onCollapse={() => onToggleAsk(card.id)}
             />
           )}

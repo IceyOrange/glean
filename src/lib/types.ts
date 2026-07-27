@@ -14,4 +14,8 @@ export interface Card {
   thought?: string;
   source: CitationSource;
   createdAt: number;
+  /** Millisecond timestamp — refreshed on every content/thought change. */
+  updatedAt?: number;
+  /** Soft-delete tombstone — presence means the card is deleted. */
+  deletedAt?: number;
 }

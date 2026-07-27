@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MindsetAnalysis } from "@/lib/ai";
-import { X, RefreshCw, Brain, Target, Compass, GitBranch, Link2 } from "lucide-react";
+import { X, RefreshCw, Brain, Target, Compass, GitBranch, Link2, Bookmark } from "lucide-react";
 
 interface MindsetModalProps {
   open: boolean;
@@ -18,8 +18,12 @@ interface MindsetModalProps {
   closeLabel: string;
   emptyLabel: string;
   genFail: string;
+  saveLabel: string;
+  savedLabel: string;
   onAnalyze: () => void;
   onClose: () => void;
+  /** Called with formatted analysis text when the user clicks "Save to inspiration library". */
+  onSaveAnalysis: (text: string) => void;
 }
 
 const TITLE_ID = "mindset-modal-title";
@@ -40,12 +44,16 @@ export function MindsetModal({
   closeLabel,
   emptyLabel,
   genFail,
+  saveLabel,
+  savedLabel,
   onAnalyze,
   onClose,
+  onSaveAnalysis,
 }: MindsetModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
+  const [saved, setSaved] = useState(false);
 
   // Trigger analysis automatically when the modal opens and there is no result yet.
   useEffect(() => {
@@ -119,12 +127,12 @@ export function MindsetModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={TITLE_ID}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 p-4 animate-modal-backdrop"
       onClick={onClose}
     >
       <div
         ref={panelRef}
-        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-paper border border-line-soft rounded-2xl shadow-2xl"
+        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-paper border border-line-soft rounded-2xl shadow-2xl animate-modal-panel"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 bg-paper/95 backdrop-blur-sm border-b border-line-soft px-5 py-4 flex items-center justify-between gap-3 z-10">
@@ -234,6 +242,32 @@ export function MindsetModal({
                   ))}
                 </ul>
               </Section>
+
+              {/* Save to inspiration library */}
+              <div className="pt-2 border-t border-line-soft">
+                <button
+                  disabled={saved}
+                  onClick={() => {
+                    const text = formatAnalysis(analysis, {
+                      themesLabel,
+                      patternsLabel,
+                      evolutionLabel,
+                      connectionsLabel,
+                    });
+                    onSaveAnalysis(text);
+                    setSaved(true);
+                    setTimeout(() => setSaved(false), 2000);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
+                    saved
+                      ? "text-sage bg-sage/10 cursor-default"
+                      : "text-ink-500 hover:text-seal hover:bg-surface"
+                  }`}
+                >
+                  <Bookmark size={13} className={saved ? "fill-sage" : ""} />
+                  {saved ? savedLabel : saveLabel}
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -262,4 +296,25 @@ function Section({
       <div className="pl-5">{children}</div>
     </div>
   );
+}
+
+/** Format a MindsetAnalysis into a plain-text string suitable for saving as a card. */
+function formatAnalysis(
+  analysis: MindsetAnalysis,
+  labels: {
+    themesLabel: string;
+    patternsLabel: string;
+    evolutionLabel: string;
+    connectionsLabel: string;
+  },
+): string {
+  const lines: string[] = [];
+  lines.push(`${labels.themesLabel}：${analysis.themes.join("、")}`);
+  lines.push("");
+  lines.push(`${labels.patternsLabel}：${analysis.patterns.join("；")}`);
+  lines.push("");
+  lines.push(`${labels.evolutionLabel}：${analysis.evolution}`);
+  lines.push("");
+  lines.push(`${labels.connectionsLabel}：${analysis.connections.join("；")}`);
+  return lines.join("\n");
 }

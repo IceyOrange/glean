@@ -50,6 +50,15 @@ export default {
           "serif",
         ],
       },
+      // Single easing family for the whole app (see .impeccable.md §Motion).
+      // Entrances decelerate naturally; exits accelerate away and run ~75%
+      // of the enter duration. Never use bounce/elastic.
+      transitionTimingFunction: {
+        "out-quart": "cubic-bezier(0.25, 1, 0.5, 1)",
+        "out-quint": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "out-expo": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "in-quart": "cubic-bezier(0.5, 0, 0.75, 0)",
+      },
     },
   },
   plugins: [],

@@ -32,8 +32,8 @@ export function SelectionBar({
   cancelLabel,
 }: SelectionBarProps) {
   return (
-    <div className="border-t border-line-soft">
-      <div className="max-w-[680px] mx-auto px-6 py-2.5 flex items-center justify-between gap-4">
+    <div className="border-t border-line-soft animate-fade-in">
+      <div className="max-w-[720px] mx-auto px-6 py-2.5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <button
             onClick={onToggleSelectAll}

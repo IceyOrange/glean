@@ -1,12 +1,16 @@
 import { Card } from "@/lib/types";
 
-export type SyncProvider = "notion" | "nutstore" | "webdav";
+export type SyncProvider = "notion" | "nutstore" | "webdav" | "gist";
 
 export interface SyncResult {
   ok: boolean;
   syncedAt?: number;
   error?: string;
   databaseId?: string;
+  gistId?: string;
+  mergedCount?: number;
+  /** Notion pages archived because they shared a Glean ID with another page. */
+  dedupedCount?: number;
 }
 
 export interface PullResult {
@@ -32,8 +36,16 @@ export interface WebDAVConfig {
   remotePath: string;
 }
 
+/** GitHub Gist provider config — discriminated by `provider: "gist"`. */
+export interface GistConfig {
+  provider: "gist";
+  token: string;
+  gistId?: string;
+  filename: string;
+}
+
 /** Discriminated union of all provider configs. Use type guards to narrow. */
-export type ProviderConfig = NotionConfig | WebDAVConfig;
+export type ProviderConfig = NotionConfig | WebDAVConfig | GistConfig;
 
 /** Type guard: narrows ProviderConfig to NotionConfig. */
 export function isNotionConfig(config: ProviderConfig): config is NotionConfig {
@@ -43,6 +55,11 @@ export function isNotionConfig(config: ProviderConfig): config is NotionConfig {
 /** Type guard: narrows ProviderConfig to WebDAVConfig. */
 export function isWebDAVConfig(config: ProviderConfig): config is WebDAVConfig {
   return config.provider === "webdav" || config.provider === "nutstore";
+}
+
+/** Type guard: narrows ProviderConfig to GistConfig. */
+export function isGistConfig(config: ProviderConfig): config is GistConfig {
+  return config.provider === "gist";
 }
 
 export interface SavedSyncConfig {

@@ -23,7 +23,7 @@
 <body>
   <div class="container">
     <h1><span>Glean</span> Privacy Policy</h1>
-    <p class="updated">Last updated: July 25, 2026</p>
+    <p class="updated">Last updated: July 27, 2026</p>
 
     <p>Glean ("we", "our", "the extension") is committed to protecting your privacy. This policy explains what data Glean collects, how it is used, and your choices.</p>
 
@@ -38,7 +38,7 @@
       <li><strong>Your annotations</strong> — Personal notes you write after clipping a quote.</li>
       <li><strong>AI-generated insights</strong> — Responses from AI services you configure, cached locally for display.</li>
       <li><strong>Extension settings</strong> — Your preferences for language, theme, AI provider, and sync configuration.</li>
-      <li><strong>Service credentials</strong> — API keys and tokens for AI providers and cloud sync services, stored locally and encrypted by the browser's storage mechanism.</li>
+      <li><strong>Service credentials</strong> — API keys and tokens for AI providers and cloud sync services. Glean stores these locally with AES-GCM obfuscation in addition to the browser's extension storage protections; this is not a substitute for device or profile security.</li>
     </ul>
 
     <h2>2. Data We Do NOT Collect</h2>
@@ -53,9 +53,9 @@
     <p>Glean requests the following browser permissions, each with a specific purpose:</p>
     <ul>
       <li><code>storage</code> — To save your clippings, annotations, and settings locally on your device.</li>
-      <li><code>history</code> — To record the source page URL and title when you clip a quote, providing context for your saved cards.</li>
       <li><code>alarms</code> — To schedule periodic background sync tasks when you enable cloud sync.</li>
       <li><code>&lt;all_urls&gt;</code> (host permission) — To allow the clipping feature to work on any website you visit. Glean injects a content script to detect text selections and show the clip button. No data is read from pages unless you actively select text and click the clip button.</li>
+      <li><code>optional host permissions</code> — When you connect an AI or cloud-sync service, Glean asks for access to that service's domain at that time. It does not request API-provider access at installation.</li>
     </ul>
 
     <h2>4. Third-Party Services</h2>
@@ -64,6 +64,7 @@
       <li><strong>AI Providers</strong> (DeepSeek, OpenAI, Anthropic, Moonshot, SiliconFlow, Zhipu/BigModel) — Your clipped quotes and annotations may be sent to generate AI insights. Each provider has their own privacy policy governing how they handle your data.</li>
       <li><strong>Notion</strong> — If you enable Notion sync, your clippings are sent to your own Notion database via the Notion API. Data is stored in your Notion workspace under your control.</li>
       <li><strong>WebDAV / Nutstore (坚果云)</strong> — If you enable WebDAV backup, your data is uploaded to your WebDAV server. Nutstore's privacy policy applies to data stored on their service.</li>
+      <li><strong>GitHub Gist</strong> — If you enable Gist sync, your data is stored in the Gist selected in your GitHub account.</li>
     </ul>
     <p><strong>Important:</strong> All API calls are made directly from your browser. Glean does not act as an intermediary or proxy for your data.</p>
 
@@ -71,13 +72,14 @@
     <ul>
       <li>All local data is stored in <code>chrome.storage.local</code>, which is protected by the browser's built-in security model.</li>
       <li>API keys and tokens are stored locally and never transmitted except to their respective services during authenticated API calls.</li>
-      <li>Glean does not implement its own encryption; it relies on the browser's storage security.</li>
+      <li>Glean uses AES-GCM obfuscation for stored credentials. It helps avoid plaintext storage, but a local extension cannot provide vault-grade protection against someone who can access your browser profile or unlocked device.</li>
     </ul>
 
     <h2>6. Data Deletion</h2>
     <p>You can delete your data at any time by:</p>
     <ul>
       <li>Opening the Glean Journal page and deleting individual cards or using bulk delete.</li>
+      <li>Using the Journal's trash to restore an accidental deletion before the retention period ends.</li>
       <li>Uninstalling the extension, which removes all locally stored data.</li>
       <li>Clearing extension data via <code>chrome://settings/content/all</code> → find Glean → Remove.</li>
     </ul>

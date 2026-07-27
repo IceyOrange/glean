@@ -3,6 +3,11 @@ export const STYLES = `
 
   /* Theme variables — swapped wholesale in dark mode */
   :host {
+    /* Single easing family — entrances decelerate, exits accelerate.
+       Bounce/elastic is banned (see .impeccable.md §Motion). */
+    --gl-ease-out: cubic-bezier(.22,1,.36,1);
+    --gl-ease-expo: cubic-bezier(.16,1,.3,1);
+    --gl-ease-exit: cubic-bezier(.5,0,.75,0);
     --gl-bg: #fbf9f4;
     --gl-bg-sub: #f4f0e7;
     --gl-bg-hover: #f0ebe0;
@@ -16,6 +21,7 @@ export const STYLES = `
     --gl-send-bg: #332e27;
     --gl-send-bg-hover: #4a4238;
     --gl-send-text: #fbf9f4;
+    --gl-focus-ring: rgba(176,74,60,.15);
     --gl-shadow: 0 8px 24px rgba(51,46,39,.07), 0 2px 6px rgba(51,46,39,.03);
     --gl-shadow-sm: 0 4px 12px rgba(51,46,39,.08), 0 1px 3px rgba(51,46,39,.04);
     --gl-shadow-hover: 0 6px 16px rgba(51,46,39,.1), 0 2px 4px rgba(51,46,39,.05);
@@ -35,6 +41,7 @@ export const STYLES = `
       --gl-send-bg: #e8e2d5;
       --gl-send-bg-hover: #f5efe3;
       --gl-send-text: #2a261f;
+      --gl-focus-ring: rgba(215,106,91,.2);
       --gl-shadow: 0 8px 24px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.25);
       --gl-shadow-sm: 0 4px 12px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.25);
       --gl-shadow-hover: 0 6px 16px rgba(0,0,0,.4), 0 2px 4px rgba(0,0,0,.3);
@@ -44,7 +51,9 @@ export const STYLES = `
   /* ── Trigger icon ( = save button) ────────── */
 
   .trigger {
-    position: fixed;
+    /* Absolute inside the fixed host. Document coordinates + scroll listener
+       make the icon stay with the selected text as the page scrolls. */
+    position: absolute;
     width: 28px;
     height: 28px;
     display: flex;
@@ -58,18 +67,21 @@ export const STYLES = `
     pointer-events: auto;
     box-shadow: var(--gl-shadow-sm);
     opacity: 0;
-    transform: scale(.8) translateY(4px);
-    animation: triggerIn .25s cubic-bezier(.34,1.56,.64,1) forwards;
-    transition: background .15s, transform .15s, box-shadow .15s, border-color .15s;
+    transform: scale(.85) translateY(3px);
+    transform-origin: top left;
+    will-change: transform, opacity;
+    animation: triggerIn .2s var(--gl-ease-expo) forwards;
+    transition: background .12s, color .12s, border-color .12s,
+      transform .12s var(--gl-ease-out), box-shadow .12s;
   }
   .trigger:hover {
     background: var(--gl-bg-sub);
     border-color: var(--gl-border-strong);
-    transform: scale(1.08);
+    transform: scale(1.05);
     box-shadow: var(--gl-shadow-hover);
   }
   .trigger:active {
-    transform: scale(.92);
+    transform: scale(.93);
   }
   .trigger:focus-visible {
     outline: 2px solid var(--gl-seal);
@@ -78,12 +90,26 @@ export const STYLES = `
   .trigger .spin {
     animation: spin .6s linear infinite;
   }
+  .trigger-success {
+    color: var(--gl-seal);
+  }
+  .trigger-success .trigger-check {
+    animation: checkPop .3s var(--gl-ease-expo) forwards;
+  }
+  .trigger-success polyline {
+    stroke-dasharray: 30;
+    stroke-dashoffset: 30;
+    animation: checkDraw .35s var(--gl-ease-expo) forwards;
+  }
 
   @keyframes triggerIn {
     to { opacity: 1; transform: scale(1) translateY(0); }
   }
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+  @keyframes checkDraw {
+    to { stroke-dashoffset: 0; }
   }
 
   /* ── Toast (morphs from trigger) ───────────── */
@@ -101,22 +127,25 @@ export const STYLES = `
     font-size: 13px;
     color: var(--gl-text);
     pointer-events: auto;
-    transition: width .35s cubic-bezier(.4,0,.2,1), height .3s ease, box-shadow .2s ease;
+    transform-origin: top left;
+    will-change: transform, opacity;
+    transition: box-shadow .2s ease, transform .2s var(--gl-ease-out), opacity .2s ease;
   }
   .toast.toast-enter {
     opacity: 0;
-    transform: scale(.82);
-    animation: toastIn .3s cubic-bezier(.34,1.56,.64,1) forwards;
+    transform: scale(.9) translateY(-4px);
+    animation: toastIn .26s var(--gl-ease-expo) forwards;
   }
   .toast.toast-out {
-    animation: toastOut .2s ease forwards;
+    animation: toastOut .18s var(--gl-ease-exit) forwards;
+    pointer-events: none;
   }
 
   @keyframes toastIn {
-    to { opacity: 1; transform: scale(1); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
   }
   @keyframes toastOut {
-    to { opacity: 0; transform: scale(.92); }
+    to { opacity: 0; transform: scale(.92) translateY(4px); }
   }
 
   .toast-bar {
@@ -128,13 +157,16 @@ export const STYLES = `
   .toast-bar .check-icon {
     color: var(--gl-seal);
     flex-shrink: 0;
-    animation: checkPop .3s cubic-bezier(.34,1.56,.64,1) .05s backwards;
+    animation: checkPop .3s var(--gl-ease-expo) .05s backwards;
   }
   .toast-label {
     font-weight: 500;
     color: var(--gl-seal);
     letter-spacing: -0.01em;
     white-space: nowrap;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .toast-label.error {
     color: var(--gl-error);
@@ -223,7 +255,7 @@ export const STYLES = `
     align-items: flex-end;
     gap: 6px;
     padding: 0 8px 8px;
-    animation: slideDown .2s cubic-bezier(.34,1.56,.64,1);
+    animation: slideDown .22s var(--gl-ease-out);
   }
   .toast-thought textarea {
     border: 1px solid var(--gl-border);
@@ -245,11 +277,12 @@ export const STYLES = `
     display: block;
     white-space: pre-wrap;
     word-break: break-word;
-    transition: border-color .4s, background .4s, height .12s ease, width .4s cubic-bezier(.34,1.56,.64,1);
+    transition: border-color .18s, background .18s;
   }
   .toast-thought textarea:focus {
     border-color: var(--gl-seal);
     background: var(--gl-bg);
+    box-shadow: 0 0 0 2px var(--gl-focus-ring);
   }
   .toast-thought textarea::placeholder {
     color: var(--gl-placeholder);
@@ -277,8 +310,9 @@ export const STYLES = `
     transform: scale(.92);
   }
   .toast-send:disabled {
-    opacity: .7;
+    opacity: .6;
     cursor: default;
+    pointer-events: none;
   }
 
   @keyframes slideDown {
@@ -287,17 +321,13 @@ export const STYLES = `
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .trigger,
-    .toast,
-    .toast-bar .check-icon,
-    .toast-thought,
-    .trigger .spin {
+    /* Universal catch-all inside the shadow root — never enumerate classes
+       here, new animated elements must not be able to slip through. */
+    *,
+    *::before,
+    *::after {
       animation-duration: .01ms !important;
       animation-iteration-count: 1 !important;
-    }
-    .trigger,
-    .toast-send,
-    .toast-thought textarea {
       transition-duration: .01ms !important;
     }
   }

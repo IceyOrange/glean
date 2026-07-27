@@ -88,12 +88,12 @@ export function SettingsModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={TITLE_ID}
-      className="fixed inset-0 bg-ink-900/30 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-ink-900/30 flex items-center justify-center z-50 p-4 animate-modal-backdrop"
       onClick={onClose}
     >
       <div
         ref={panelRef}
-        className="bg-surface rounded-2xl border border-line-soft shadow-xl p-6 w-[420px] max-w-full max-h-[85vh] overflow-y-auto"
+        className="bg-surface rounded-2xl border border-line-soft shadow-xl p-6 w-[420px] max-w-full max-h-[85vh] overflow-y-auto animate-modal-panel"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id={TITLE_ID} className="font-quote text-[16px] font-semibold text-ink-900 mb-1">{settingsTitle}</h3>

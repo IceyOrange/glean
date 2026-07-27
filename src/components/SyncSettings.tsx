@@ -6,25 +6,29 @@ import {
   ProviderConfig,
   NotionConfig,
   WebDAVConfig,
+  GistConfig,
   SyncResult,
   isNotionConfig,
   isWebDAVConfig,
+  isGistConfig,
   getSyncConfig,
   saveSyncConfig,
   makeDefaultConfig,
   getProviderMeta,
   getAdapter,
-  syncCards,
+  requestSync,
   isWebDAVProvider,
   searchDatabases,
+  searchGists,
 } from "@/lib/sync";
-import { getCards } from "@/lib/storage";
+import { ensureOriginPermission } from "@/lib/permissions";
+import { Switch } from "@/components/SettingsPanel";
 
 interface SyncSettingsProps {
   tr: (key: string, vars?: Record<string, string | number>) => string;
 }
 
-const PROVIDERS: SyncProvider[] = ["notion", "nutstore", "webdav"];
+const PROVIDERS: SyncProvider[] = ["notion", "nutstore", "webdav", "gist"];
 
 function formatTime(timestamp: number | undefined, tr: SyncSettingsProps["tr"]) {
   if (!timestamp) return tr("syncNever");
@@ -41,9 +45,18 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
   const [dbSearchError, setDbSearchError] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   const [manualDbId, setManualDbId] = useState(false);
+  // Gist search state
+  const [gistSearchLoading, setGistSearchLoading] = useState(false);
+  const [gistSearchResults, setGistSearchResults] = useState<Array<{ id: string; title: string }>>([]);
+  const [gistSearchError, setGistSearchError] = useState<string | null>(null);
+  const [manualGistId, setManualGistId] = useState(false);
 
   useEffect(() => {
-    getSyncConfig().then(setConfig);
+    // `prev ?? saved`: if the user already started typing/pasting before the
+    // (PBKDF2-slow) load resolved, keep their edit instead of clobbering it.
+    getSyncConfig().then((saved) => {
+      if (saved) setConfig((prev) => prev ?? saved);
+    });
   }, []);
 
   // Create or clear the periodic sync alarm whenever the user toggles sync.
@@ -55,19 +68,35 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
     }
   }, [config?.enabled]);
 
+  const makeFallback = (): SavedSyncConfig => ({
+    provider: "notion",
+    enabled: false,
+    config: makeDefaultConfig("notion"),
+    providerConfigs: {},
+  });
+
   const updateConfig = (patch: Partial<SavedSyncConfig>) => {
     setConfig((prev) => {
-      const next = { ...(prev ?? { provider: "notion" as SyncProvider, enabled: false, config: makeDefaultConfig("notion"), providerConfigs: {} }), ...patch };
+      const next = { ...(prev ?? makeFallback()), ...patch };
       void saveSyncConfig(next);
       return next;
     });
   };
 
-  const updateProviderConfig = (patch: Partial<Omit<NotionConfig, "provider">> | Partial<Omit<WebDAVConfig, "provider">>) => {
+  const updateProviderConfig = (
+    patch: Partial<Omit<NotionConfig, "provider">> | Partial<Omit<WebDAVConfig, "provider">> | Partial<Omit<GistConfig, "provider">>
+  ) => {
     setConfig((prev) => {
-      if (!prev) return null;
-      const newConfig = { ...prev.config, ...patch } as ProviderConfig;
-      const next = { ...prev, config: newConfig, providerConfigs: { ...prev.providerConfigs, [prev.provider]: newConfig } };
+      // Never drop edits while the saved config is still loading (prev ===
+      // null) — a controlled input whose onChange is dropped looks exactly
+      // like "paste is blocked".
+      const base = prev ?? makeFallback();
+      const newConfig = { ...base.config, ...patch } as ProviderConfig;
+      const next = {
+        ...base,
+        config: newConfig,
+        providerConfigs: { ...base.providerConfigs, [base.provider]: newConfig },
+      };
       void saveSyncConfig(next);
       return next;
     });
@@ -75,7 +104,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
 
   const handleProviderChange = (newProvider: SyncProvider) => {
     setConfig((prev) => {
-      const base = prev ?? { provider: "notion" as SyncProvider, enabled: false, config: makeDefaultConfig("notion"), providerConfigs: {} };
+      const base = prev ?? makeFallback();
       // Save current provider's config into the map
       const updatedConfigs = { ...base.providerConfigs, [base.provider]: base.config };
       // Restore target provider's saved config, or use defaults
@@ -88,6 +117,9 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
     setDbSearchResults([]);
     setDbSearchError(null);
     setManualDbId(false);
+    setGistSearchResults([]);
+    setGistSearchError(null);
+    setManualGistId(false);
   };
 
   const handleSync = async () => {
@@ -99,10 +131,19 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
       return;
     }
 
+    const endpoint = isNotionConfig(config.config)
+      ? "https://api.notion.com"
+      : isGistConfig(config.config)
+        ? "https://api.github.com"
+        : config.config.serverUrl;
+    if (!(await ensureOriginPermission(endpoint))) {
+      setResult({ ok: false, error: tr("permissionDenied") });
+      return;
+    }
+
     setLoading(true);
     setResult(null);
-    const cards = await getCards();
-    const res = await syncCards(cards);
+    const res = await requestSync();
     setResult(res);
     setLoading(false);
 
@@ -115,6 +156,10 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
     if (!isNotionConfig(providerConfig)) return;
     const token = providerConfig.token?.trim();
     if (!token) return;
+    if (!(await ensureOriginPermission("https://api.notion.com"))) {
+      setDbSearchError(tr("permissionDenied"));
+      return;
+    }
     setDbSearchLoading(true);
     setDbSearchError(null);
     setManualDbId(false);
@@ -132,20 +177,77 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
     }
   };
 
+  const handleSearchGists = async () => {
+    if (!isGistConfig(providerConfig)) return;
+    const token = providerConfig.token?.trim();
+    if (!token) return;
+    if (!(await ensureOriginPermission("https://api.github.com"))) {
+      setGistSearchError(tr("permissionDenied"));
+      return;
+    }
+    setGistSearchLoading(true);
+    setGistSearchError(null);
+    setManualGistId(false);
+    try {
+      const gists = await searchGists(token);
+      setGistSearchResults(gists);
+      if (gists.length === 0) {
+        setGistSearchError(tr("syncGistSearchFail"));
+      }
+    } catch {
+      setGistSearchError(tr("syncGistSearchFail"));
+      setGistSearchResults([]);
+    } finally {
+      setGistSearchLoading(false);
+    }
+  };
+
   const provider = config?.provider ?? "notion";
   const providerConfig = config?.config ?? makeDefaultConfig(provider);
   const meta = getProviderMeta(provider);
 
+  // Auto-search as soon as a token is present — the dropdown should just
+  // appear, without a manual "搜索数据库 / 搜索 Gist" click. Debounced so
+  // typing a token doesn't fire one request per keystroke. A failed search
+  // is NOT auto-retried (the manual button remains as the retry path);
+  // changing the token clears results+error and re-arms the effect.
+  useEffect(() => {
+    if (provider === "notion" && isNotionConfig(providerConfig)) {
+      if (!providerConfig.token?.trim()) return;
+      if (dbSearchLoading || dbSearchResults.length > 0 || dbSearchError) return;
+      const timer = setTimeout(() => void handleSearchDatabases(), 800);
+      return () => clearTimeout(timer);
+    }
+    if (provider === "gist" && isGistConfig(providerConfig)) {
+      if (!providerConfig.token?.trim()) return;
+      if (gistSearchLoading || gistSearchResults.length > 0 || gistSearchError) return;
+      const timer = setTimeout(() => void handleSearchGists(), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [provider, providerConfig, dbSearchLoading, dbSearchResults.length, dbSearchError, gistSearchLoading, gistSearchResults.length, gistSearchError]);
+
   const inputCls =
-    "w-full px-3 py-2 text-sm bg-surface rounded-lg border border-line outline-none transition-shadow placeholder:text-ink-300 focus:border-seal/50 focus:ring-2 focus:ring-seal/20 text-ink-900";
+    "w-full px-3 py-2 text-sm bg-surface rounded-lg border border-line outline-none transition-all duration-200 hover:border-ink-300/40 focus:border-seal/50 focus:ring-[3px] focus:ring-seal/15 placeholder:text-ink-300 text-ink-900 appearance-none";
+
+  const selectCls = `${inputCls} pr-8 py-1.5 text-xs`;
+
+  const linkBtnBase =
+    "flex items-center gap-1.5 w-full px-2.5 py-1.5 text-[11px] text-ink-700 bg-paper border border-line-soft rounded-lg hover:bg-line-soft/60 hover:border-ink-300/30 active:scale-[0.97] transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper";
+
+  const actionBtnBase =
+    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed";
 
   const notionToken = isNotionConfig(providerConfig) ? providerConfig.token : "";
   const notionDbId = isNotionConfig(providerConfig) ? (providerConfig.databaseId ?? "") : "";
 
+  const gistToken = isGistConfig(providerConfig) ? providerConfig.token : "";
+  const gistId = isGistConfig(providerConfig) ? (providerConfig.gistId ?? "") : "";
+  const gistFilename = isGistConfig(providerConfig) ? providerConfig.filename : "glean-backup.json";
+
   return (
     <div className="space-y-4">
       {/* Provider selector */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-ink-600">
           <Cloud size={14} />
           <span className="text-xs font-medium">{tr("syncProvider")}</span>
@@ -154,7 +256,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
           <select
             value={provider}
             onChange={(e) => handleProviderChange(e.target.value as SyncProvider)}
-            className={`${inputCls} appearance-none pr-8 py-1.5 text-xs`}
+            className={selectCls}
           >
             {PROVIDERS.map((p) => (
               <option key={p} value={p}>
@@ -166,55 +268,54 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
         </div>
       </div>
 
-      <p className="text-[11px] text-ink-500 leading-relaxed">
-        {tr(meta.descriptionKey)}
-      </p>
+      <p className="text-[11px] text-ink-500 leading-relaxed">{tr(meta.descriptionKey)}</p>
 
       {/* ─── Notion config ─── */}
       {provider === "notion" && (
         <div className="space-y-3">
-          {/* Setup guide */}
-          <div className="bg-surface border border-line-soft rounded-xl p-3 space-y-2">
+          {/* Setup wizard — three linear steps */}
+          <div className="bg-paper border border-line-soft rounded-xl p-3 space-y-2 transition-colors duration-200">
             <button
               onClick={() => setShowGuide((v) => !v)}
-              className="flex items-center gap-1 w-full text-left"
+              className="flex items-center gap-1 w-full text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper rounded-lg"
+              aria-expanded={showGuide}
             >
               <span className="text-[11px] font-medium text-ink-600">{tr("syncNotionGuide")}</span>
-              <ChevronDown size={12} className={`text-ink-400 transition-transform ${showGuide ? "" : "-rotate-90"}`} />
+              <ChevronDown
+                size={12}
+                className={`text-ink-400 transition-transform duration-200 ease-out-quint ${showGuide ? "rotate-0" : "-rotate-90"}`}
+              />
             </button>
             {showGuide && (
-              <ol className="text-[11px] text-ink-500 space-y-1.5 pl-0.5 list-decimal list-inside">
-                <li>
-                  {tr("syncNotionStep1")}
-                  <a
-                    href="https://notion.so"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5 text-seal hover:underline ml-1"
-                  >
-                    notion.so <ExternalLink size={9} />
-                  </a>
-                </li>
-                <li>
-                  {tr("syncNotionStep2")}
-                  <a
-                    href="https://www.notion.so/my-integrations"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-0.5 text-seal hover:underline ml-1"
-                  >
-                    Notion Integrations <ExternalLink size={9} />
-                  </a>
-                </li>
-                <li>{tr("syncNotionStep3")}</li>
-              </ol>
+              <div className="space-y-1.5 animate-status-pop">
+                <a
+                  href="https://www.notion.so/my-integrations/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkBtnBase}
+                >
+                  <span>{tr("syncNotionCreateIntegration")}</span>
+                  <ExternalLink size={10} className="ml-auto text-ink-400" />
+                </a>
+                <a
+                  href="https://www.notion.so/my-integrations"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkBtnBase}
+                >
+                  <span>{tr("syncNotionCopyToken")}</span>
+                  <ExternalLink size={10} className="ml-auto text-ink-400" />
+                </a>
+                <p className="text-[10px] text-ink-400 pl-0.5 pt-0.5">{tr("syncNotionSelectDbStep")}</p>
+              </div>
             )}
           </div>
 
           {/* Token input */}
           <div>
-            <label className="block text-xs text-ink-600 mb-1">{tr("syncToken")}</label>
+            <label htmlFor="sync-notion-token" className="block text-xs text-ink-600 mb-1.5">{tr("syncToken")}</label>
             <input
+              id="sync-notion-token"
               type="password"
               value={notionToken}
               onChange={(e) => {
@@ -230,13 +331,13 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
 
           {/* Database selection */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs text-ink-600">{tr("syncDatabaseId")}</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="sync-notion-db" className="text-xs text-ink-600">{tr("syncDatabaseId")}</label>
               {notionToken.trim() && (
                 <button
                   onClick={handleSearchDatabases}
                   disabled={dbSearchLoading}
-                  className="flex items-center gap-1 text-[10px] text-seal hover:underline disabled:opacity-50"
+                  className="flex items-center gap-1 text-[10px] font-medium text-seal hover:text-seal/80 hover:underline disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper rounded-sm"
                 >
                   {dbSearchLoading ? <Loader2 size={10} className="animate-spin" /> : <Search size={10} />}
                   {tr("syncNotionSearchDb")}
@@ -248,6 +349,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             {dbSearchResults.length > 0 && !manualDbId ? (
               <div className="space-y-1.5">
                 <select
+                  id="sync-notion-db"
                   value={notionDbId}
                   onChange={(e) => updateProviderConfig({ databaseId: e.target.value || undefined })}
                   className={inputCls}
@@ -261,7 +363,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
                 </select>
                 <button
                   onClick={() => setManualDbId(true)}
-                  className="text-[10px] text-ink-400 hover:text-ink-600"
+                  className="text-[10px] text-ink-400 hover:text-ink-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper rounded-sm"
                 >
                   {tr("syncNotionManualId")}
                 </button>
@@ -269,6 +371,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             ) : (
               <div className="space-y-1">
                 <input
+                  id="sync-notion-db"
                   type="text"
                   value={notionDbId}
                   onChange={(e) => updateProviderConfig({ databaseId: e.target.value || undefined })}
@@ -278,7 +381,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
                 {dbSearchResults.length > 0 && manualDbId && (
                   <button
                     onClick={() => setManualDbId(false)}
-                    className="text-[10px] text-seal hover:underline"
+                    className="text-[10px] font-medium text-seal hover:text-seal/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper rounded-sm"
                   >
                     {tr("syncNotionSearchDb")}
                   </button>
@@ -286,9 +389,142 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
               </div>
             )}
 
-            {dbSearchError && (
-              <p className="text-[10px] text-seal mt-1">{dbSearchError}</p>
+            {dbSearchLoading && (
+              <p className="text-[10px] text-ink-400 mt-1.5 animate-status-pop">{tr("syncNotionSearchingDb")}</p>
             )}
+            {dbSearchError && (
+              <p className="text-[10px] text-seal mt-1.5 animate-status-pop">{dbSearchError}</p>
+            )}
+            {!notionDbId && !dbSearchLoading && (
+              <p className="text-[10px] text-ink-400 mt-1.5">{tr("syncNotionDbAutoHint")}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── GitHub Gist config ─── */}
+      {provider === "gist" && isGistConfig(providerConfig) && (
+        <div className="space-y-3">
+          {/* Setup wizard — three linear steps */}
+          <div className="bg-paper border border-line-soft rounded-xl p-3 space-y-2 transition-colors duration-200">
+            <a
+              href="https://github.com/settings/personal-access-tokens/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={linkBtnBase}
+            >
+              <span>{tr("syncGistCreateToken")}</span>
+              <ExternalLink size={10} className="ml-auto text-ink-400" />
+            </a>
+            <a
+              href="https://github.com/settings/personal-access-tokens"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={linkBtnBase}
+            >
+              <span>{tr("syncGistCopyToken")}</span>
+              <ExternalLink size={10} className="ml-auto text-ink-400" />
+            </a>
+            <p className="text-[10px] text-ink-400 pl-0.5 pt-0.5">{tr("syncGistSelectGistHint")}</p>
+          </div>
+
+          {/* Token input */}
+          <div>
+            <label htmlFor="sync-gist-token" className="block text-xs text-ink-600 mb-1.5">{tr("syncGistToken")}</label>
+            <input
+              id="sync-gist-token"
+              type="password"
+              value={gistToken}
+              onChange={(e) => {
+                updateProviderConfig({ token: e.target.value });
+                setGistSearchResults([]);
+                setGistSearchError(null);
+              }}
+              placeholder="github_pat_…"
+              className={inputCls}
+            />
+          </div>
+
+          {/* Gist selection */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="sync-gist-id" className="text-xs text-ink-600">{tr("syncGistSelectGist")}</label>
+              {gistToken.trim() && (
+                <button
+                  onClick={handleSearchGists}
+                  disabled={gistSearchLoading}
+                  className="flex items-center gap-1 text-[10px] font-medium text-seal hover:text-seal/80 hover:underline disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper rounded-sm"
+                >
+                  {gistSearchLoading ? <Loader2 size={10} className="animate-spin" /> : <Search size={10} />}
+                  {tr("syncGistSearchGist")}
+                </button>
+              )}
+            </div>
+
+            {gistSearchResults.length > 0 && !manualGistId ? (
+              <div className="space-y-1.5">
+                <select
+                  id="sync-gist-id"
+                  value={gistId}
+                  onChange={(e) => updateProviderConfig({ gistId: e.target.value || undefined })}
+                  className={inputCls}
+                >
+                  <option value="">{tr("syncGistSelectGistPlaceholder")}</option>
+                  {gistSearchResults.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.title}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setManualGistId(true)}
+                  className="text-[10px] text-ink-400 hover:text-ink-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper rounded-sm"
+                >
+                  {tr("syncGistManualId")}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <input
+                  id="sync-gist-id"
+                  type="text"
+                  value={gistId}
+                  onChange={(e) => updateProviderConfig({ gistId: e.target.value || undefined })}
+                  placeholder="gist id (可选)"
+                  className={inputCls}
+                />
+                {gistSearchResults.length > 0 && manualGistId && (
+                  <button
+                    onClick={() => setManualGistId(false)}
+                    className="text-[10px] font-medium text-seal hover:text-seal/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper rounded-sm"
+                  >
+                    {tr("syncGistSearchGist")}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {gistSearchLoading && (
+              <p className="text-[10px] text-ink-400 mt-1.5 animate-status-pop">{tr("syncGistSearching")}</p>
+            )}
+            {gistSearchError && (
+              <p className="text-[10px] text-seal mt-1.5 animate-status-pop">{gistSearchError}</p>
+            )}
+            {!gistId && (
+              <p className="text-[10px] text-ink-400 mt-1.5">{tr("syncGistAutoCreate")}</p>
+            )}
+          </div>
+
+          {/* Filename */}
+          <div>
+            <label htmlFor="sync-gist-filename" className="block text-xs text-ink-600 mb-1.5">{tr("syncGistFilename")}</label>
+            <input
+              id="sync-gist-filename"
+              type="text"
+              value={gistFilename}
+              onChange={(e) => updateProviderConfig({ filename: e.target.value })}
+              className={inputCls}
+            />
           </div>
         </div>
       )}
@@ -297,8 +533,9 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
       {isWebDAVProvider(provider) && isWebDAVConfig(providerConfig) && (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-ink-600 mb-1">{tr("syncServerUrl")}</label>
+            <label htmlFor="sync-webdav-url" className="block text-xs text-ink-600 mb-1.5">{tr("syncServerUrl")}</label>
             <input
+              id="sync-webdav-url"
               type="url"
               value={providerConfig.serverUrl}
               onChange={(e) => updateProviderConfig({ serverUrl: e.target.value })}
@@ -306,8 +543,9 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             />
           </div>
           <div>
-            <label className="block text-xs text-ink-600 mb-1">{tr("syncUsername")}</label>
+            <label htmlFor="sync-webdav-user" className="block text-xs text-ink-600 mb-1.5">{tr("syncUsername")}</label>
             <input
+              id="sync-webdav-user"
               type="text"
               value={providerConfig.username}
               onChange={(e) => updateProviderConfig({ username: e.target.value })}
@@ -315,8 +553,9 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             />
           </div>
           <div>
-            <label className="block text-xs text-ink-600 mb-1">{tr("syncPassword")}</label>
+            <label htmlFor="sync-webdav-password" className="block text-xs text-ink-600 mb-1.5">{tr("syncPassword")}</label>
             <input
+              id="sync-webdav-password"
               type="password"
               value={providerConfig.password}
               onChange={(e) => updateProviderConfig({ password: e.target.value })}
@@ -324,8 +563,9 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             />
           </div>
           <div>
-            <label className="block text-xs text-ink-600 mb-1">{tr("syncRemotePath")}</label>
+            <label htmlFor="sync-webdav-path" className="block text-xs text-ink-600 mb-1.5">{tr("syncRemotePath")}</label>
             <input
+              id="sync-webdav-path"
               type="text"
               value={providerConfig.remotePath}
               onChange={(e) => updateProviderConfig({ remotePath: e.target.value })}
@@ -337,27 +577,19 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
 
       {/* Sync controls */}
       <div className="flex items-center justify-between pt-1">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => updateConfig({ enabled: !config?.enabled })}
-            className={`relative w-7 h-4 rounded-full transition-colors ${
-              config?.enabled ? "bg-seal" : "bg-line"
-            }`}
-            aria-checked={config?.enabled}
-            role="switch"
-          >
-            <span
-              className={`absolute top-[2px] w-3 h-3 bg-paper rounded-full transition-all ${
-                config?.enabled ? "left-[16px]" : "left-[2px]"
-              }`}
-            />
-          </button>
+        <div className="flex items-center gap-2.5">
+          <Switch
+            checked={!!config?.enabled}
+            onChange={() => updateConfig({ enabled: !config?.enabled })}
+            size="sm"
+            ariaLabel={tr("syncEnable")}
+          />
           <span className="text-xs text-ink-600">{tr("syncEnable")}</span>
         </div>
         <button
           onClick={handleSync}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-paper bg-ink-900 rounded-lg hover:bg-ink-600 disabled:opacity-50 transition-colors"
+          className={`${actionBtnBase} text-paper bg-ink-900 hover:bg-ink-800`}
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : <Cloud size={12} />}
           {tr("syncNow")}
@@ -367,29 +599,31 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
       {/* Status messages */}
       {result && (
         <div
-          className={`flex items-start gap-1.5 text-[11px] ${
-            result.ok ? "text-sage" : "text-seal"
+          className={`animate-status-pop flex items-start gap-1.5 text-[11px] ${
+            result.ok && !result.error ? "text-sage" : "text-seal"
           }`}
         >
-          {result.ok ? <Check size={12} /> : <AlertCircle size={12} />}
+          {result.ok && !result.error ? <Check size={13} className="mt-0.5 shrink-0" /> : <AlertCircle size={13} className="mt-0.5 shrink-0" />}
           <span>
             {result.ok
-              ? tr("syncSuccess")
+              ? result.error
+                ? // Partial failure: some items failed to push — never swallow it.
+                  result.error
+                : result.mergedCount && result.mergedCount > 0
+                  ? tr("syncMerged", { count: result.mergedCount })
+                  : tr("syncSuccess")
               : result.error}
+            {result.dedupedCount ? ` · ${tr("syncDeduped", { count: result.dedupedCount })}` : ""}
           </span>
         </div>
       )}
 
       {!result && config?.lastSyncAt && !config.lastError && (
-        <p className="text-[11px] text-ink-500">
-          {tr("syncLastSuccess", { time: formatTime(config.lastSyncAt, tr) })}
-        </p>
+        <p className="text-[11px] text-ink-500">{tr("syncLastSuccess", { time: formatTime(config.lastSyncAt, tr) })}</p>
       )}
 
       {config?.lastError && !result && (
-        <p className="text-[11px] text-seal">
-          {tr("syncLastError", { error: config.lastError })}
-        </p>
+        <p className="text-[11px] text-seal animate-status-pop">{tr("syncLastError", { error: config.lastError })}</p>
       )}
     </div>
   );

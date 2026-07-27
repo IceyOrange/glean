@@ -1,4 +1,4 @@
-import { SavedSyncConfig, SyncProvider, ProviderConfig, NotionConfig, WebDAVConfig, isNotionConfig, isWebDAVConfig } from "./types";
+import { SavedSyncConfig, SyncProvider, ProviderConfig, NotionConfig, WebDAVConfig, GistConfig, isNotionConfig, isWebDAVConfig, isGistConfig } from "./types";
 import { getProviderMeta, SYNC_PROVIDERS, isWebDAVProvider } from "./registry";
 import { setSecret, getSecret, removeSecret } from "@/lib/secrets";
 
@@ -6,6 +6,7 @@ const SYNC_CONFIG_KEY = "glean_sync_config";
 
 // Secret storage keys — one per provider credential field.
 const SECRET_KEY_NOTION_TOKEN = "glean_sync_secret_notion_token";
+const SECRET_KEY_GIST_TOKEN = "glean_sync_secret_gist_token";
 const SECRET_KEY_WEBDAV_PASSWORD = (provider: SyncProvider) =>
   `glean_sync_secret_${provider}_password`;
 
@@ -32,6 +33,12 @@ function extractSecrets(config: ProviderConfig): {
     return { safe, secrets };
   }
 
+  if (isGistConfig(config)) {
+    secrets.set(SECRET_KEY_GIST_TOKEN, config.token);
+    const safe: GistConfig = { ...config, token: "" };
+    return { safe, secrets };
+  }
+
   // Exhaustive check — should never reach here.
   const _exhaustive: never = config;
   return { safe: _exhaustive, secrets };
@@ -53,6 +60,11 @@ function mergeSecrets(safe: ProviderConfig, secrets: Map<string, string>): Provi
     return { ...safe, password };
   }
 
+  if (isGistConfig(safe)) {
+    const token = secrets.get(SECRET_KEY_GIST_TOKEN) ?? safe.token;
+    return { ...safe, token };
+  }
+
   const _exhaustive: never = safe;
   return _exhaustive;
 }
@@ -72,6 +84,11 @@ function detectPlaintextSecrets(config: ProviderConfig): Map<string, string> | n
 
   if (isWebDAVConfig(config) && config.password) {
     secrets.set(SECRET_KEY_WEBDAV_PASSWORD(config.provider), config.password);
+    found = true;
+  }
+
+  if (isGistConfig(config) && config.token) {
+    secrets.set(SECRET_KEY_GIST_TOKEN, config.token);
     found = true;
   }
 
@@ -108,6 +125,9 @@ export async function getSyncConfig(): Promise<SavedSyncConfig | null> {
     } else if (isWebDAVConfig(raw.config)) {
       const password = await getSecret<string>(SECRET_KEY_WEBDAV_PASSWORD(raw.config.provider));
       if (password !== null) activeSecrets.set(SECRET_KEY_WEBDAV_PASSWORD(raw.config.provider), password);
+    } else if (isGistConfig(raw.config)) {
+      const token = await getSecret<string>(SECRET_KEY_GIST_TOKEN);
+      if (token !== null) activeSecrets.set(SECRET_KEY_GIST_TOKEN, token);
     }
     raw.config = mergeSecrets(raw.config, activeSecrets);
 
@@ -122,6 +142,9 @@ export async function getSyncConfig(): Promise<SavedSyncConfig | null> {
       } else if (isWebDAVConfig(cfg)) {
         const password = await getSecret<string>(SECRET_KEY_WEBDAV_PASSWORD(cfg.provider));
         if (password !== null) pSecrets.set(SECRET_KEY_WEBDAV_PASSWORD(cfg.provider), password);
+      } else if (isGistConfig(cfg)) {
+        const token = await getSecret<string>(SECRET_KEY_GIST_TOKEN);
+        if (token !== null) pSecrets.set(SECRET_KEY_GIST_TOKEN, token);
       }
       (raw.providerConfigs as Record<string, ProviderConfig>)[key] = mergeSecrets(cfg, pSecrets);
     }
@@ -184,6 +207,7 @@ export async function clearSyncConfig(): Promise<void> {
   // Remove encrypted secrets for every known provider. Drives off
   // SYNC_PROVIDERS so a newly added provider is covered without touching this.
   await removeSecret(SECRET_KEY_NOTION_TOKEN);
+  await removeSecret(SECRET_KEY_GIST_TOKEN);
   for (const meta of SYNC_PROVIDERS) {
     if (isWebDAVProvider(meta.id)) {
       await removeSecret(SECRET_KEY_WEBDAV_PASSWORD(meta.id));

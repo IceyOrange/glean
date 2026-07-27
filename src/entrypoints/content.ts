@@ -1,8 +1,15 @@
 import { saveCard, updateCard, deleteCard } from "@/lib/storage";
 import type { Card, CitationSource } from "@/lib/types";
+import type { SaveCardResult } from "@/lib/storage";
 import { getLang, t, type Lang } from "@/lib/i18n";
 import { STYLES } from "@/lib/content/styles";
+import { flashSelection, releaseFlash } from "@/lib/content/highlight-flash";
 import { extractCitationSource } from "@/lib/content/citation";
+import {
+  getAutoThought,
+  noteThoughtSkip,
+  resetThoughtSkips,
+} from "@/lib/preferences";
 import {
   SHORT_WIDTH,
   LONG_WIDTH_BASE,
@@ -40,7 +47,11 @@ export default defineContentScript({
       host.id = "glean-popover-host";
       host.style.cssText =
         "position:fixed;z-index:2147483647;top:0;left:0;width:0;height:0;pointer-events:none;";
-      document.body.appendChild(host);
+      // Append to <html> instead of <body>: if the page puts a CSS transform on
+      // <body>, it becomes the containing block for fixed-position descendants and
+      // the trigger would appear to scroll with the page. <html> is far less likely
+      // to be transformed.
+      (document.documentElement || document.body).appendChild(host);
 
       shadowRoot = host.attachShadow({ mode: "open" });
 
@@ -66,25 +77,206 @@ export default defineContentScript({
     }
 
     function destroyAll() {
+      removeTrigger();
+      removeToast();
       if (host) host.remove();
       host = null;
       shadowRoot = null;
-      triggerEl = null;
-      toastEl = null;
-      activeToastCardId = null;
     }
 
     function clearAll() {
       if (!shadowRoot) return;
-      const old = shadowRoot.querySelector(".trigger, .toast");
-      if (old) old.remove();
+      removeTrigger();
+      removeToast();
     }
 
     // ── Trigger icon (click = instant save) ───────────
 
     let triggerEl: HTMLElement | null = null;
+    let triggerScrollHandler: (() => void) | null = null;
     let toastEl: HTMLElement | null = null;
     let activeToastCardId: string | null = null;
+    let toastScrollHandler: (() => void) | null = null;
+    let toastDocPos: { left: number; top: number } | null = null;
+    let toastWheelHandler: ((e: WheelEvent) => void) | null = null;
+    let toastRemovalTimer: ReturnType<typeof setTimeout> | null = null;
+    // Set by showSavedToast; run exactly once when the toast goes away,
+    // regardless of which path (dismiss, outside click, new save) tears it down.
+    // `neutral` = the dismissal carries no "user didn't want the thought box"
+    // signal (reading release, replacement by a newer save) and must not feed
+    // the adaptive auto-thought learning.
+    let accountToastDismissal: ((neutral?: boolean) => void) | null = null;
+    // Generation token of the highlight flash owned by the current toast.
+    // The highlight lives while the toast lives; releasing starts its fade.
+    let activeFlashGen: number | null = null;
+
+    function removeTrigger() {
+      if (triggerScrollHandler) {
+        window.removeEventListener("scroll", triggerScrollHandler, { passive: true } as EventListenerOptions);
+        triggerScrollHandler = null;
+      }
+      triggerEl?.remove();
+      triggerEl = null;
+    }
+
+    function prefersReducedMotion(): boolean {
+      return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    }
+
+    function releaseActiveFlash() {
+      if (activeFlashGen === null) return;
+      releaseFlash(activeFlashGen);
+      activeFlashGen = null;
+    }
+
+    function detachToastHandlers(neutral = false) {
+      if (toastScrollHandler) {
+        window.removeEventListener("scroll", toastScrollHandler, { passive: true } as EventListenerOptions);
+        toastScrollHandler = null;
+      }
+      toastDocPos = null;
+      if (toastWheelHandler) {
+        window.removeEventListener("wheel", toastWheelHandler);
+        toastWheelHandler = null;
+      }
+      accountToastDismissal?.(neutral);
+      accountToastDismissal = null;
+    }
+
+    function removeToast() {
+      if (toastRemovalTimer) {
+        clearTimeout(toastRemovalTimer);
+        toastRemovalTimer = null;
+      }
+      detachToastHandlers();
+      toastEl?.remove();
+      toastEl = null;
+      activeToastCardId = null;
+      // The toast is gone — only now does the highlight begin its slow fade.
+      releaseActiveFlash();
+    }
+
+    /**
+     * Animate the toast out, then run the normal removeToast cleanup.
+     * Idempotent: multiple calls while the animation is running are ignored.
+     */
+    function animateToastRemoval(onRemoved?: () => void) {
+      if (!toastEl) {
+        onRemoved?.();
+        return;
+      }
+      if (prefersReducedMotion()) {
+        removeToast();
+        onRemoved?.();
+        return;
+      }
+      if (toastEl.classList.contains("toast-out")) {
+        // Already fading; just make sure the cleanup callback fires.
+        if (onRemoved && !toastRemovalTimer) {
+          toastRemovalTimer = setTimeout(() => {
+            toastRemovalTimer = null;
+            onRemoved();
+          }, 180);
+        }
+        return;
+      }
+      toastEl.classList.add("toast-out");
+      toastRemovalTimer = setTimeout(() => {
+        toastRemovalTimer = null;
+        removeToast();
+        onRemoved?.();
+      }, 200);
+    }
+
+    /**
+     * Animate out the current toast without destroying the host, so a new
+     * toast/trigger can appear immediately while the old one fades.
+     */
+    function animateToastReplacement() {
+      const oldToast = toastEl;
+      if (!oldToast) return;
+      // Neutral: being replaced by a newer save says nothing about whether
+      // the user wants the thought box — don't feed it to the learning.
+      detachToastHandlers(true);
+      toastEl = null;
+      activeToastCardId = null;
+      // The old toast's highlight fades; the new save re-flashes right after.
+      releaseActiveFlash();
+      if (prefersReducedMotion()) {
+        oldToast.remove();
+        return;
+      }
+      oldToast.classList.add("toast-out");
+      setTimeout(() => oldToast.remove(), 200);
+    }
+
+    function anchorToastToDocument() {
+      if (!toastEl) return;
+      const rect = toastEl.getBoundingClientRect();
+      toastDocPos = {
+        left: (parseFloat(toastEl.style.left) || rect.left) + window.scrollX,
+        top: (parseFloat(toastEl.style.top) || rect.top) + window.scrollY,
+      };
+      if (!toastScrollHandler) {
+        toastScrollHandler = () => {
+          if (!toastEl || !toastDocPos) return;
+          toastEl.style.left = `${toastDocPos.left - window.scrollX}px`;
+          toastEl.style.top = `${toastDocPos.top - window.scrollY}px`;
+        };
+        window.addEventListener("scroll", toastScrollHandler, { passive: true });
+      }
+    }
+
+    /** Viewport position for the trigger/toast: end of the selected text. */
+    function getSelectionAnchor(
+      sel: Selection,
+      mouseX: number,
+      mouseY: number
+    ): { x: number; y: number } {
+      const size = 28;
+      const gap = 8;
+      let left: number;
+      let top: number;
+
+      if (sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        const rects = range.getClientRects();
+        // Use the last rect (where the selection ended) when available, falling
+        // back to the full bounding rect for collapsed or unusual selections.
+        const rect = rects.length > 0 ? rects[rects.length - 1] : range.getBoundingClientRect();
+        left = rect.right + gap;
+        top = rect.top - size - gap;
+        if (left + size > window.innerWidth - 4) left = rect.left - size - gap;
+        if (top < 4) top = rect.bottom + gap;
+      } else {
+        left = mouseX + gap;
+        top = mouseY - size - gap;
+        if (left + size > window.innerWidth - 4) left = mouseX - size - gap;
+        if (top < 4) top = mouseY + gap;
+      }
+      return { x: left, y: top };
+    }
+
+    /**
+     * Shared save path (trigger click / Alt+G hotkey / error retry).
+     * Flashes the selection on success and shows the saved toast at (x, y).
+     */
+    async function saveSelection(sel: Selection, x: number, y: number) {
+      const text = sel.toString().trim();
+      if (!text) return;
+
+      flushPendingThought();
+      animateToastReplacement();
+
+      lastSaveAttempt = { content: text, source: extractCitationSource() };
+      try {
+        const result: SaveCardResult = await saveCard(lastSaveAttempt);
+        activeFlashGen = flashSelection(sel);
+        showSavedToast(triggerEl, x, y, result.card, result.duplicated);
+      } catch {
+        showErrorToast(x, y, lastSaveAttempt);
+      }
+    }
 
     function showTrigger(sel: Selection, mouseX: number, mouseY: number) {
       flushPendingThought();
@@ -107,16 +299,27 @@ export default defineContentScript({
         if (e.key === "Escape") destroyAll();
       });
 
-      // Position near mouse release point
-      const size = 28;
-      const gap = 8;
-      let left = mouseX + gap;
-      let top = mouseY - size - gap;
-      if (left + size > window.innerWidth - 4) left = mouseX - size - gap;
-      if (top < 4) top = mouseY + gap;
+      // Position at the end of the selected text so the icon scrolls with the
+      // page content, staying visually anchored to the sentence that was selected.
+      const { x: viewportLeft, y: viewportTop } = getSelectionAnchor(sel, mouseX, mouseY);
 
-      triggerEl.style.left = `${left}px`;
-      triggerEl.style.top = `${top}px`;
+      // Store document coordinates and update on scroll. Because the host is
+      // fixed to the viewport, the INITIAL placement must be viewport
+      // coordinates (doc - scroll); the scroll listener keeps it anchored to
+      // the selected text afterwards.
+      const docLeft = viewportLeft + window.scrollX;
+      const docTop = viewportTop + window.scrollY;
+      triggerEl.style.left = `${docLeft - window.scrollX}px`;
+      triggerEl.style.top = `${docTop - window.scrollY}px`;
+
+      triggerScrollHandler = () => {
+        if (!triggerEl) return;
+        triggerEl.style.left = `${docLeft - window.scrollX}px`;
+        triggerEl.style.top = `${docTop - window.scrollY}px`;
+      };
+      window.addEventListener("scroll", triggerScrollHandler, { passive: true });
+
+      const successCheckIcon = `<svg class="trigger-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
       // Click trigger = instant save
       triggerEl.addEventListener("mousedown", async (e) => {
@@ -126,20 +329,52 @@ export default defineContentScript({
         const text = sel.toString().trim();
         if (!text) return;
 
-        lastSaveAttempt = { content: text, source: extractCitationSource() };
+        const clickedTrigger = triggerEl;
+        if (!clickedTrigger) return;
 
         // Show saving state on trigger
-        if (triggerEl) {
-          triggerEl.innerHTML = `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
-          triggerEl.style.pointerEvents = "none";
+        clickedTrigger.innerHTML = `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
+        clickedTrigger.style.pointerEvents = "none";
+
+        // Use the icon's current viewport position in case the user scrolled
+        // between showing the trigger and clicking it.
+        const currentRect = clickedTrigger.getBoundingClientRect();
+        const toastX = currentRect.left;
+        const toastY = currentRect.top;
+
+        // Disown the global trigger so showSavedToast doesn't crossfade it;
+        // we handle the success morph locally and in parallel with the toast.
+        triggerEl = null;
+        try {
+          await saveSelection(sel, toastX, toastY);
+        } catch {
+          triggerEl = clickedTrigger;
+          removeTrigger();
+          return;
         }
 
-        try {
-          const card = await saveCard(lastSaveAttempt);
-          showSavedToast(triggerEl, left, top, card);
-        } catch {
-          showErrorToast(left, top, lastSaveAttempt);
+        if (!clickedTrigger.isConnected) return;
+        if (prefersReducedMotion()) {
+          triggerEl = clickedTrigger;
+          removeTrigger();
+          return;
         }
+
+        // Success micro-animation: seal check pops in, then the trigger fades.
+        clickedTrigger.innerHTML = successCheckIcon;
+        clickedTrigger.classList.add("trigger-success");
+        clickedTrigger.style.pointerEvents = "none";
+
+        setTimeout(() => {
+          if (!clickedTrigger.isConnected) return;
+          clickedTrigger.style.transition = "opacity .15s var(--gl-ease-out), transform .15s var(--gl-ease-out)";
+          clickedTrigger.style.opacity = "0";
+          clickedTrigger.style.transform = "scale(.85)";
+          setTimeout(() => {
+            triggerEl = clickedTrigger;
+            removeTrigger();
+          }, 160);
+        }, 350);
       });
     }
 
@@ -149,39 +384,54 @@ export default defineContentScript({
       trigger: HTMLElement | null,
       x: number,
       y: number,
-      card: Card
+      card: Card,
+      duplicated = false,
     ) {
       if (!shadowRoot) return;
       currentLang = await getLang();
       const cardId = card.id;
       activeToastCardId = cardId;
 
-      // Open the thought editor right after saving so the user can immediately capture their idea.
-      const autoThought = true;
+      // Open the thought editor right after saving so the user can immediately
+      // capture their idea — unless the user repeatedly dismissed it empty, in
+      // which case we learned to show only the compact confirmation bar.
+      const autoThought = await getAutoThought();
 
       // Crossfade the trigger into the toast so the popup feels continuous.
       if (trigger && trigger === triggerEl) {
-        trigger.style.transition = "opacity .15s ease, transform .15s ease";
+        trigger.style.transition = "opacity .15s var(--gl-ease-out), transform .15s var(--gl-ease-out)";
         trigger.style.opacity = "0";
         trigger.style.transform = "scale(.85)";
-        setTimeout(() => trigger.remove(), 160);
+        setTimeout(() => removeTrigger(), 160);
       }
       triggerEl = null;
 
       toastEl = document.createElement("div");
       toastEl.className = "toast toast-enter";
-      toastEl.setAttribute("role", "status");
+      toastEl.setAttribute("role", "dialog");
+      toastEl.setAttribute("aria-label", tr("savedToast"));
       toastEl.style.left = `${x}px`;
       toastEl.style.top = `${y}px`;
 
       // Clamp to viewport after the first paint so the enter animation starts
-      // from a visible position.
+      // from a visible position, then pin the toast to the document so it
+      // scrolls together with the saved text.
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => { if (toastEl) clampToastPosition(toastEl); });
+        requestAnimationFrame(() => {
+          if (!toastEl) return;
+          clampToastPosition(toastEl);
+          anchorToastToDocument();
+        });
       });
 
       let showThought = autoThought;
+      const autoOpened = autoThought;
       let thoughtText = "";
+      let thoughtWritten = false;
+      let skipAccounting = false; // undo deletes the card — not a thought skip
+      // Reading release (scroll / Space-page) means "I'm moving on", NOT
+      // "I don't want the thought box" — it must not feed the learning.
+      let releasedForReading = false;
       let dismissed = false;
       let dismissTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -196,29 +446,31 @@ export default defineContentScript({
         toastEl.addEventListener(evt, (e) => e.stopPropagation());
       }
 
-      // Focus trap: when the thought panel is open and focus leaves it,
-      // bring it back to the textarea. This defends against pages that
-      // programmatically steal focus (e.g. AI chatboxes refocusing their
-      // composer while the user is typing).
-      // S3 fix: this replaces the global HTMLElement.prototype.focus patch.
-      // Shadow DOM retargeting + stopPropagation on key/input events already
-      // prevents most focus theft; this focusin listener catches the rest.
-      toastEl.addEventListener("focusin", () => {
-        if (!showThought || !toastEl || dismissed) return;
-        const active = shadowRoot?.activeElement;
-        if (active && toastEl.contains(active)) return;
+      // Reading-intent release: scrolling the page means "I'm moving on", so
+      // dismiss the toast unless the user has an unsubmitted thought.
+      // (Focus is NOT trapped — Tab and clicks leave the toast naturally.)
+      toastWheelHandler = (e: WheelEvent) => {
+        if (dismissed || !toastEl) return;
+        // e.target is retargeted to the host for events inside our shadow
+        // DOM, so use composedPath() to tell "over the toast" from "outside".
+        if (e.composedPath().includes(toastEl)) return;
         const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
-        ta?.focus();
-      });
+        if (showThought && (ta?.value.trim() || thoughtText.trim())) return;
+        releasedForReading = true;
+        dismiss();
+      };
+      window.addEventListener("wheel", toastWheelHandler, { passive: true });
 
-      toastEl.addEventListener("focusout", () => {
-        if (!showThought || !toastEl || dismissed) return;
-        const active = shadowRoot?.activeElement;
-        if (!active || !toastEl.contains(active)) {
-          const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
-          ta?.focus();
+      // Learn from this dismissal when the toast goes away (any teardown path).
+      accountToastDismissal = (neutral = false) => {
+        if (skipAccounting || neutral || releasedForReading) return;
+        const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
+        if (thoughtWritten || thoughtText.trim() || ta?.value.trim()) {
+          void resetThoughtSkips();
+        } else if (autoOpened) {
+          void noteThoughtSkip();
         }
-      });
+      };
 
       // Prevent toast clicks from bubbling to page
       toastEl.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -239,6 +491,7 @@ export default defineContentScript({
 
         if (id === "glean-undo") {
           e.stopPropagation();
+          skipAccounting = true; // deleting the card is not a thought skip
           if (dismissTimer) clearTimeout(dismissTimer);
           void deleteCard(cardId).catch(() => { /* Card already gone */ });
           activeToastCardId = null;
@@ -294,7 +547,7 @@ export default defineContentScript({
         let html = `
           <div class="toast-bar">
             <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            <span class="toast-label">${tr("savedToast")}</span>
+            <span class="toast-label">${duplicated ? tr("syncAlreadySaved") : tr("savedToast")}</span>
             <button class="toast-undo" id="glean-undo" title="${tr("undo")}">${undoIcon}</button>
             <div class="toast-sep"></div>
             <button class="toast-journal" id="glean-journal" title="${tr("viewJournal")}">${journalIcon}</button>
@@ -376,7 +629,11 @@ export default defineContentScript({
               if (widthContractTimer) { clearTimeout(widthContractTimer); widthContractTimer = null; }
               textarea.style.width = `${longW}px`;
               // Ensure the toast doesn't spill outside the viewport after it grows.
-              setTimeout(() => { if (toastEl) clampToastPosition(toastEl); }, 50);
+              setTimeout(() => {
+                if (!toastEl) return;
+                clampToastPosition(toastEl);
+                anchorToastToDocument();
+              }, 50);
             }
           } else if (widthExpanded) {
             // Contract back once there is comfortable headroom (avoid jitter while typing)
@@ -395,7 +652,11 @@ export default defineContentScript({
                   if (latestVal.trim() && latestLongest >= SHORT_WIDTH - WIDTH_CONTRACT_THRESHOLD) return;
                   widthExpanded = false;
                   textarea.style.width = `${SHORT_WIDTH}px`;
-                  setTimeout(() => { if (toastEl) clampToastPosition(toastEl); }, 50);
+                  setTimeout(() => {
+                if (!toastEl) return;
+                clampToastPosition(toastEl);
+                anchorToastToDocument();
+              }, 50);
                 }, 400);
               }
             } else if (widthContractTimer) {
@@ -426,6 +687,22 @@ export default defineContentScript({
 
         textarea.addEventListener("keydown", (e) => {
           shiftHeld = e.shiftKey;
+
+          // Reading-intent release: on an empty editor, scroll keys mean the
+          // user wants to keep reading, not type. Dismiss and perform the
+          // scroll the key would have caused on the page.
+          // (Skipped during IME composition, where Space confirms candidates.)
+          const emptyThought = !textarea.value.trim();
+          if (!e.isComposing && emptyThought && (e.key === " " || e.key === "PageDown" || e.key === "PageUp")) {
+            e.preventDefault();
+            e.stopPropagation();
+            const up = e.key === "PageUp" || (e.key === " " && e.shiftKey);
+            releasedForReading = true;
+            dismiss();
+            window.scrollBy(0, (up ? -1 : 1) * window.innerHeight * 0.85);
+            return;
+          }
+
           const isEnter = e.key === "Enter" || e.keyCode === 13 || e.code === "Enter";
           if (isEnter && e.shiftKey) {
             // Let Shift+Enter insert a newline (default behaviour).
@@ -497,74 +774,80 @@ export default defineContentScript({
         }
         try {
           await updateCard(cardId, { thought: text.trim() });
+          thoughtWritten = true;
           if (toastEl) {
             const thoughtArea = toastEl.querySelector(".toast-thought") as HTMLElement | null;
             const label = toastEl.querySelector(".toast-label") as HTMLElement | null;
 
-            // Freeze the toast at its current size so the inner thought area
-            // can collapse without the whole box snapping smaller first.
-            const startRect = toastEl.getBoundingClientRect();
-            toastEl.style.width = `${startRect.width}px`;
-            toastEl.style.height = `${startRect.height}px`;
-            toastEl.style.transition = "none";
-            toastEl.style.overflow = "hidden";
+            if (prefersReducedMotion()) {
+              thoughtArea?.remove();
+              if (label) label.textContent = tr("thoughtSaved");
+            } else {
+              // Freeze the toast at its current size so the inner thought area
+              // can collapse without the whole box snapping smaller first.
+              const startRect = toastEl.getBoundingClientRect();
+              toastEl.style.width = `${startRect.width}px`;
+              toastEl.style.height = `${startRect.height}px`;
+              toastEl.style.transition = "none";
+              toastEl.style.overflow = "hidden";
 
-            if (thoughtArea) {
-              thoughtArea.style.maxHeight = thoughtArea.scrollHeight + "px";
-              thoughtArea.offsetHeight;
-              thoughtArea.style.transition = "max-height .25s cubic-bezier(.4,0,.2,1), opacity .2s ease, padding .25s cubic-bezier(.4,0,.2,1)";
-              thoughtArea.style.maxHeight = "0";
-              thoughtArea.style.opacity = "0";
-              thoughtArea.style.padding = "0 8px";
-              thoughtArea.style.overflow = "hidden";
-              thoughtArea.addEventListener("transitionend", () => thoughtArea.remove(), { once: true });
-            }
+              if (thoughtArea) {
+                thoughtArea.style.maxHeight = thoughtArea.scrollHeight + "px";
+                thoughtArea.offsetHeight;
+                thoughtArea.style.transition = "max-height .25s var(--gl-ease-out), opacity .2s var(--gl-ease-out), padding .25s var(--gl-ease-out)";
+                thoughtArea.style.maxHeight = "0";
+                thoughtArea.style.opacity = "0";
+                thoughtArea.style.padding = "0 8px";
+                thoughtArea.style.overflow = "hidden";
+                thoughtArea.addEventListener("transitionend", () => thoughtArea.remove(), { once: true });
+              }
 
-            if (label) {
-              label.style.transition = "opacity .15s ease";
-              label.style.opacity = "0";
+              if (label) {
+                label.style.transition = "opacity .15s ease";
+                label.style.opacity = "0";
+                setTimeout(() => {
+                  if (!label.isConnected) return;
+                  label.textContent = tr("thoughtSaved");
+                  label.style.opacity = "1";
+                }, 150);
+              }
+
+              // Once the thought area has collapsed, measure the compact bar
+              // size and animate the toast itself down to it.
               setTimeout(() => {
-                if (!label.isConnected) return;
-                label.textContent = tr("thoughtSaved");
-                label.style.opacity = "1";
-              }, 150);
-            }
-
-            // Once the thought area has collapsed, measure the compact bar
-            // size and animate the toast itself down to it.
-            setTimeout(() => {
-              if (!toastEl) return;
-              toastEl.style.width = "";
-              toastEl.style.height = "";
-              const compactRect = toastEl.getBoundingClientRect();
-
-              requestAnimationFrame(() => {
                 if (!toastEl) return;
-                toastEl.style.width = `${startRect.width}px`;
-                toastEl.style.height = `${startRect.height}px`;
-                toastEl.style.transition = "none";
-                toastEl.offsetHeight; // force reflow
+                toastEl.style.width = "";
+                toastEl.style.height = "";
+                const compactRect = toastEl.getBoundingClientRect();
 
                 requestAnimationFrame(() => {
                   if (!toastEl) return;
-                  toastEl.style.transition = "width .35s cubic-bezier(.4,0,.2,1), height .3s ease";
-                  toastEl.style.width = `${compactRect.width}px`;
-                  toastEl.style.height = `${compactRect.height}px`;
+                  toastEl.style.width = `${startRect.width}px`;
+                  toastEl.style.height = `${startRect.height}px`;
+                  toastEl.style.transition = "none";
+                  toastEl.offsetHeight; // force reflow
 
-                  const onDone = (e: TransitionEvent) => {
-                    if (e.propertyName !== "width" || !toastEl) return;
-                    toastEl.style.width = "";
-                    toastEl.style.height = "";
-                    toastEl.style.overflow = "";
-                    toastEl.style.transition = "";
-                    toastEl.removeEventListener("transitionend", onDone);
-                  };
-                  toastEl.addEventListener("transitionend", onDone);
+                  requestAnimationFrame(() => {
+                    if (!toastEl) return;
+                    toastEl.style.transition = "width .35s var(--gl-ease-out), height .3s var(--gl-ease-out)";
+                    toastEl.style.width = `${compactRect.width}px`;
+                    toastEl.style.height = `${compactRect.height}px`;
+
+                    const onDone = (e: TransitionEvent) => {
+                      if (e.propertyName !== "width" || !toastEl) return;
+                      toastEl.style.width = "";
+                      toastEl.style.height = "";
+                      toastEl.style.overflow = "";
+                      toastEl.style.transition = "";
+                      toastEl.removeEventListener("transitionend", onDone);
+                    };
+                    toastEl.addEventListener("transitionend", onDone);
+                  });
                 });
-              });
-            }, 280);
+              }, 280);
+            }
           }
-          setTimeout(dismiss, 4500);
+          setTimeout(dismiss, 1800);
         } catch {
           dismiss();
         }
@@ -591,10 +874,7 @@ export default defineContentScript({
         if (dismissed) return;
         dismissed = true;
         if (dismissTimer) clearTimeout(dismissTimer);
-        if (toastEl) {
-          toastEl.classList.add("toast-out");
-          setTimeout(destroyAll, 200);
-        }
+        animateToastRemoval(() => destroyAll());
       }
 
       shadowRoot.appendChild(toastEl);
@@ -614,8 +894,7 @@ export default defineContentScript({
     ) {
       if (!shadowRoot) return;
       currentLang = await getLang();
-      if (triggerEl) triggerEl.remove();
-      triggerEl = null;
+      removeTrigger();
 
       toastEl = document.createElement("div");
       toastEl.className = "toast toast-enter";
@@ -632,7 +911,7 @@ export default defineContentScript({
           ${retryButton}
         </div>
       `;
-      // Viewport clamping
+      // Viewport clamping, then pin to the document like the saved toast.
       requestAnimationFrame(() => {
         if (!toastEl) return;
         const rect = toastEl.getBoundingClientRect();
@@ -642,11 +921,24 @@ export default defineContentScript({
         if (rect.bottom > vh - 8) toastEl.style.top = `${vh - rect.height - 8}px`;
         if (parseFloat(toastEl.style.left) < 8) toastEl.style.left = "8px";
         if (parseFloat(toastEl.style.top) < 8) toastEl.style.top = "8px";
+        anchorToastToDocument();
       });
       // Hover to pause auto-dismiss
-      let errorTimer = setTimeout(destroyAll, 2500);
-      toastEl.addEventListener("mouseenter", () => clearTimeout(errorTimer));
-      toastEl.addEventListener("mouseleave", () => { errorTimer = setTimeout(destroyAll, 1500); });
+      let errorTimer: ReturnType<typeof setTimeout> | null = null;
+      errorTimer = setTimeout(() => animateToastRemoval(() => destroyAll()), 2500);
+      toastEl.addEventListener("mouseenter", () => {
+        if (errorTimer) clearTimeout(errorTimer);
+        if (toastRemovalTimer) {
+          clearTimeout(toastRemovalTimer);
+          toastRemovalTimer = null;
+          toastEl?.classList.remove("toast-out");
+        }
+      });
+      toastEl.addEventListener("mouseleave", () => {
+        if (toastEl && !toastEl.classList.contains("toast-out")) {
+          errorTimer = setTimeout(() => animateToastRemoval(() => destroyAll()), 1500);
+        }
+      });
       toastEl.addEventListener("mousedown", (e) => e.stopPropagation());
       shadowRoot.appendChild(toastEl);
 
@@ -654,8 +946,9 @@ export default defineContentScript({
         shadowRoot.getElementById("glean-retry")?.addEventListener("click", async (e) => {
           e.stopPropagation();
           try {
-            const card = await saveCard(attempt);
-            showSavedToast(null, x, y, card);
+            const result: SaveCardResult = await saveCard(attempt);
+            animateToastReplacement();
+            showSavedToast(null, x, y, result.card, result.duplicated);
           } catch {
             // Stay on the error toast.
           }
@@ -706,6 +999,28 @@ export default defineContentScript({
       handleSelectionEnd(e.clientX, e.clientY, e.composedPath());
     });
 
+    // Alt+G saves the current selection directly — no trigger click needed.
+    // This is also the only entry point for keyboard-made selections.
+    // (AltGr on Windows reports ctrlKey+altKey, so requiring no ctrl/meta
+    // keeps AltGr combinations typing characters as usual.)
+    document.addEventListener("keydown", (e) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.repeat) return;
+      if (e.code !== "KeyG") return;
+      const target = e.target as HTMLElement | null;
+      // Typing in a field, or interacting with our own shadow UI.
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (host && target === host) return;
+
+      const sel = window.getSelection();
+      const text = sel?.toString().trim();
+      if (!sel || !text || text.length < 2 || sel.rangeCount === 0) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      const { x, y } = getSelectionAnchor(sel, 0, 0);
+      void saveSelection(sel, x, y);
+    });
+
     document.addEventListener("touchend", (e) => {
       const touch = e.changedTouches[0];
       if (!touch) return;
@@ -718,7 +1033,11 @@ export default defineContentScript({
       if (!host) return;
       if (host.contains(target as Node)) return;
       flushPendingThought();
-      destroyAll();
+      if (toastEl) {
+        animateToastRemoval(() => destroyAll());
+      } else {
+        destroyAll();
+      }
     }
 
     document.addEventListener("mousedown", (e) => dismissIfOutside(e.target));
@@ -729,6 +1048,7 @@ export default defineContentScript({
     window.addEventListener("resize", () => {
       if (!toastEl) return;
       clampToastPosition(toastEl);
+      anchorToastToDocument();
       const ta = shadowRoot?.getElementById("glean-thought") as HTMLTextAreaElement | null;
       if (!ta) return;
       const maxW = getMaxTextareaWidth();

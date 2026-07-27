@@ -6,6 +6,7 @@ import {
   saveAskExchange,
   getAskHistory,
   type AskExchange,
+  type AskScope,
 } from "@/lib/ai";
 import type { Lang } from "@/lib/i18n";
 
@@ -53,6 +54,7 @@ export function useAskState() {
     async (
       cardId: string,
       question: string,
+      scope: AskScope,
       cards: Card[],
       lang: Lang,
       genFailLabel: string,
@@ -73,7 +75,7 @@ export function useAskState() {
       const requestId = ++askRequestRef.current;
 
       try {
-        const answer = await askAboutCard(config, card, cards, question, lang);
+        const answer = await askAboutCard(config, card, cards, question, lang, scope);
         if (askRequestRef.current !== requestId) return;
         const exchange: AskExchange = { question, answer, createdAt: Date.now() };
         setAskExchanges((prev) => [...prev, exchange]);

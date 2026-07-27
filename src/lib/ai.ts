@@ -15,6 +15,9 @@ export interface AskExchange {
   createdAt: number;
 }
 
+/** Controls exactly how much of the local library is sent with one question. */
+export type AskScope = "card" | "related" | "library";
+
 export interface MindsetAnalysis {
   themes: string[];
   patterns: string[];
@@ -61,6 +64,29 @@ export async function formatAIError(response: Response): Promise<string> {
     // fall through
   }
   return `AI API error: ${response.status} ${text}`;
+}
+
+/**
+ * Build an OpenAI-compatible API path under `baseUrl`.
+ * Most providers expose `/v1/...` directly under the base URL, but some
+ * (e.g. Zhipu at `…/api/paas/v4`) already bake the version segment into the
+ * base URL. If `baseUrl` already contains a `/vN` version segment, append
+ * only the trailing path; otherwise prepend `/v1`.
+ *
+ * Examples:
+ *   apiPath("https://api.deepseek.com", "chat/completions")  → ".../v1/chat/completions"
+ *   apiPath("https://open.bigmodel.cn/api/paas/v4", "chat/completions") → ".../v4/chat/completions"
+ */
+export function apiPath(baseUrl: string, trailing: string): string {
+  const trimmed = baseUrl.replace(/\/$/, "");
+  return /\/v\d+(?:\/|$)/.test(trimmed)
+    ? `${trimmed}/${trailing}`
+    : `${trimmed}/v1/${trailing}`;
+}
+
+/** Convenience wrapper kept for call sites that only need chat completions. */
+function chatCompletionsUrl(baseUrl: string): string {
+  return apiPath(baseUrl, "chat/completions");
 }
 
 /** @internal Exported for testing only. */
@@ -115,7 +141,7 @@ export async function callAI(
     body.response_format = { type: "json_object" };
   }
 
-  const response = await fetchWithRetry(baseUrl + "/v1/chat/completions", {
+  const response = await fetchWithRetry(chatCompletionsUrl(baseUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -231,22 +257,47 @@ function formatCardForPrompt(c: Card, i: number): string {
   return line;
 }
 
+function relatedCards(card: Card, allCards: Card[]): Card[] {
+  const words = new Set(
+    `${card.content} ${card.thought ?? ""}`.toLocaleLowerCase()
+      .match(/[\p{L}\p{N}]{3,}/gu) ?? [],
+  );
+  if (words.size === 0) return [];
+  return allCards
+    .filter((candidate) => candidate.id !== card.id)
+    .map((candidate) => {
+      const candidateWords = new Set(
+        `${candidate.content} ${candidate.thought ?? ""}`.toLocaleLowerCase()
+          .match(/[\p{L}\p{N}]{3,}/gu) ?? [],
+      );
+      const score = [...words].filter((word) => candidateWords.has(word)).length;
+      return { candidate, score };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score || (b.candidate.updatedAt ?? b.candidate.createdAt) - (a.candidate.updatedAt ?? a.candidate.createdAt))
+    .slice(0, 8)
+    .map(({ candidate }) => candidate);
+}
+
 export async function askAboutCard(
   config: AIConfig,
   card: Card,
   allCards: Card[],
   question: string,
-  lang: Lang = "zh"
+  lang: Lang = "zh",
+  scope: AskScope = "related",
 ): Promise<string> {
-  const recentCards = allCards
-    .filter((c) => c.id !== card.id)
-    .slice(0, 20);
+  const contextCards = scope === "card"
+    ? []
+    : scope === "related"
+      ? relatedCards(card, allCards)
+      : allCards.filter((candidate) => candidate.id !== card.id).slice(0, 20);
 
   const contextBlock =
-    recentCards.length > 0
-      ? "\n\n" + t("aiAskContextHeader", lang, { count: recentCards.length }) + "\n"
-        + recentCards.map(formatCardForPrompt).join("\n")
-      : "\n\n" + t("aiAskFirstRecord", lang);
+    contextCards.length > 0
+      ? "\n\n" + t("aiAskContextHeader", lang, { count: contextCards.length }) + "\n"
+        + contextCards.map(formatCardForPrompt).join("\n")
+      : "\n\n" + (scope === "card" ? t("aiAskCardOnly", lang) : t("aiAskFirstRecord", lang));
 
   const systemPrompt =
     t("aiAskRole", lang) + "\n\n" +
@@ -328,13 +379,14 @@ export async function analyzeMindset(
     '  "connections": ["' + t("aiMindsetConnectionsDesc", lang) + '"]\n' +
     "}\n";
 
-  const records = cards
+  const records = [...cards]
+    .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt))
     .slice(0, 50)
     .map(formatCardForPrompt)
     .join("\n\n");
 
   const userPrompt =
-    t("aiMindsetRecordsHeader", lang, { count: cards.length }) + "\n\n" +
+    t("aiMindsetRecordsHeader", lang, { count: Math.min(cards.length, 50) }) + "\n\n" +
     records;
 
   const content = await callAI(config, systemPrompt, userPrompt, true);

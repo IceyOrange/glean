@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Motion tokens (single easing family — see .impeccable.md §Motion) ── */
+:root {
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-quart: cubic-bezier(0.5, 0, 0.75, 0); /* exits only */
+}
+
 @keyframes toast-up {
   from {
     opacity: 0;
@@ -24,12 +32,32 @@
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @keyframes stat-pop {
   0% {
     transform: scale(1);
   }
   35% {
-    transform: scale(1.25);
+    transform: scale(1.15);
     color: oklch(var(--seal));
   }
   100% {
@@ -64,7 +92,7 @@
     --ink-700: 37% 0.016 80;
     --ink-600: 45% 0.015 80;
     --ink-500: 52% 0.013 85;
-    --ink-400: 60% 0.012 85;
+    --ink-400: 55% 0.012 85;
     --ink-300: 72% 0.01 88;
     --line: 90% 0.008 90;
     --line-soft: 94% 0.006 90;
@@ -82,11 +110,11 @@
     --ink-700: 85% 0.01 85;
     --ink-600: 78% 0.01 85;
     --ink-500: 70% 0.011 85;
-    --ink-400: 62% 0.012 85;
+    --ink-400: 66% 0.012 85;
     --ink-300: 50% 0.012 85;
     --line: 38% 0.014 82;
     --line-soft: 33% 0.013 82;
-    --seal: 63% 0.16 38;
+    --seal: 70% 0.16 38;
     --seal-soft: 34% 0.06 40;
     --ochre: 70% 0.1 78;
     --sage: 68% 0.08 155;
@@ -129,5 +157,192 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+/* ── popup polish utilities ── */
+@keyframes popup-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes status-pop {
+  0% {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-out-right {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-out-left {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+@layer utilities {
+  .animate-popup-enter {
+    animation: popup-enter 0.25s var(--ease-out-expo) both;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.18s var(--ease-out-quart) both;
+  }
+
+  .animate-fade-up {
+    animation: fade-up 0.45s var(--ease-out-expo) both;
+  }
+
+  .animate-fade-up-fast {
+    animation: fade-up 0.3s var(--ease-out-expo) both;
+  }
+
+  .animate-toast-up {
+    animation: toast-up 0.25s var(--ease-out-expo) both;
+  }
+
+  .animate-stat-pop {
+    animation: stat-pop 0.5s var(--ease-out-quart);
+  }
+
+  .animate-modal-backdrop {
+    animation: fade-in 0.2s var(--ease-out-quart) both;
+  }
+
+  .animate-modal-panel {
+    animation: modal-panel-in 0.3s var(--ease-out-expo) both;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      oklch(var(--line-soft) / 0.45) 25%,
+      oklch(var(--surface) / 0.9) 50%,
+      oklch(var(--line-soft) / 0.45) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+
+  .animate-status-pop {
+    animation: status-pop 0.2s var(--ease-out-expo) both;
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.24s var(--ease-out-expo) both;
+  }
+
+  .animate-slide-out-right {
+    animation: slide-out-right 0.18s var(--ease-in-quart) both;
+  }
+
+  .animate-slide-in-left {
+    animation: slide-in-left 0.24s var(--ease-out-expo) both;
+  }
+
+  .animate-slide-out-left {
+    animation: slide-out-left 0.18s var(--ease-in-quart) both;
+  }
+}
+
+/* === journal polish keyframes & utilities === */
+@keyframes journal-card-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes journal-spotlight-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes journal-shuffle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer utilities {
+  .animate-journal-card-reveal {
+    animation: journal-card-reveal 0.45s var(--ease-out-expo) both;
+  }
+
+  .animate-journal-spotlight-fade {
+    animation: journal-spotlight-fade 0.4s var(--ease-out-expo) both;
+  }
+
+  .animate-journal-shuffle-spin {
+    animation: journal-shuffle-spin 0.5s var(--ease-out-quart);
   }
 }

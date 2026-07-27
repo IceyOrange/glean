@@ -1,17 +1,17 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/lib/types";
-import { getCards } from "@/lib/storage";
+import { getActiveCards } from "@/lib/storage";
 
 /**
- * Manages the card list: loads from storage on mount and stays in sync
- * via chrome.storage.onChanged.
+ * Manages the card list: loads active (non-tombstoned) cards from storage on
+ * mount and stays in sync via chrome.storage.onChanged.
  */
 export function useJournalCards() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getCards().then((c) => {
+    getActiveCards().then((c) => {
       setCards(c);
       setLoading(false);
     });
@@ -21,7 +21,9 @@ export function useJournalCards() {
       area: string,
     ) => {
       if (area === "local" && changes.glean_cards) {
-        setCards(changes.glean_cards.newValue ?? []);
+        // Re-filter tombstones from the raw storage value.
+        const all = (changes.glean_cards.newValue as Card[] | undefined) ?? [];
+        setCards(all.filter((c) => !c.deletedAt));
       }
     };
     chrome.storage.onChanged.addListener(listener);

@@ -1,11 +1,13 @@
 import { ReactNode, RefObject, useState, useEffect, useRef } from "react";
-import { ArrowLeft, Search, Settings, X, Brain, MoreHorizontal, Download, CheckSquare, Diamond } from "lucide-react";
+import { ArrowLeft, Search, Settings, X, Brain, MoreHorizontal, Download, CheckSquare, Diamond, Upload, Trash2 } from "lucide-react";
 
 interface SearchHeaderProps {
   query: string;
   canSelect: boolean;
   canExport: boolean;
   canAnalyzeMindset: boolean;
+  /** Whether AI is configured; controls the mindset button's visual state. */
+  aiReady: boolean;
   searchRef: RefObject<HTMLInputElement | null>;
   onBack: () => void;
   onQueryChange: (value: string) => void;
@@ -14,6 +16,10 @@ interface SearchHeaderProps {
   onStartSelection: () => void;
   onAnalyzeMindset: () => void;
   onOpenSettings: () => void;
+  onImport: () => void;
+  onOpenTrash: () => void;
+  activeFilter: "all" | "noThought" | "recent";
+  onFilterChange: (filter: "all" | "noThought" | "recent") => void;
   title: string;
   subtitle: string;
   /** One-line collection summary under the masthead; hidden when empty. */
@@ -25,8 +31,18 @@ interface SearchHeaderProps {
   selectLabel: string;
   settingsLabel: string;
   analyzeMindsetLabel: string;
+  /** Tooltip shown when AI is not configured. */
+  aiNotConfiguredHint: string;
   moreLabel: string;
   clearSearchLabel: string;
+  importLabel: string;
+  trashLabel: string;
+  filterLabel: string;
+  filterOptions: Record<"all" | "noThought" | "recent", string>;
+  /** Number of matching cards while searching. */
+  resultCount?: number;
+  /** Localized label for the result count (e.g. "3 results"). */
+  resultCountLabel?: string;
   /** Rendered inside the sticky bar (e.g. the selection toolbar). */
   children?: ReactNode;
 }
@@ -36,6 +52,7 @@ export function SearchHeader({
   canSelect,
   canExport,
   canAnalyzeMindset,
+  aiReady,
   searchRef,
   onBack,
   onQueryChange,
@@ -44,6 +61,10 @@ export function SearchHeader({
   onStartSelection,
   onAnalyzeMindset,
   onOpenSettings,
+  onImport,
+  onOpenTrash,
+  activeFilter,
+  onFilterChange,
   title,
   subtitle,
   statsLabel,
@@ -54,13 +75,20 @@ export function SearchHeader({
   selectLabel,
   settingsLabel,
   analyzeMindsetLabel,
+  aiNotConfiguredHint,
   moreLabel,
   clearSearchLabel,
+  importLabel,
+  trashLabel,
+  filterLabel,
+  filterOptions,
+  resultCount,
+  resultCountLabel,
   children,
 }: SearchHeaderProps) {
   const [showMore, setShowMore] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
-  const hasMoreActions = canSelect || canExport;
+  const hasMoreActions = true;
 
   // Close the more menu on outside click.
   useEffect(() => {
@@ -77,26 +105,26 @@ export function SearchHeader({
     // child of the page root so it can stick beyond the masthead's height.
     <>
       {/* Masthead — the journal cover, scrolls away */}
-      <header className="max-w-[768px] mx-auto px-6 pt-12 pb-8 text-center">
-        <p className="font-quote italic text-[34px] font-semibold tracking-tight text-ink-900 leading-none">
+      <header className="max-w-[720px] mx-auto px-6 pt-8 pb-5 text-center">
+        <p className="font-quote italic text-[28px] font-semibold tracking-tight text-ink-900 leading-none">
           {title}
         </p>
-        <p className="mt-2.5 text-[11px] uppercase tracking-[0.35em] text-ink-500">
+        <p className="mt-1.5 text-[10px] uppercase tracking-[0.25em] text-ink-500">
           {subtitle}
         </p>
-        <div className="mt-6 flex items-center justify-center gap-3" aria-hidden="true">
-          <span className="h-px w-12 bg-line" />
-          <Diamond size={7} className="text-seal/70" fill="currentColor" />
-          <span className="h-px w-12 bg-line" />
+        <div className="mt-3 flex items-center justify-center gap-3" aria-hidden="true">
+          <span className="h-px w-8 bg-line" />
+          <Diamond size={6} className="text-seal/60" fill="currentColor" />
+          <span className="h-px w-8 bg-line" />
         </div>
         {statsLabel && (
-          <p className="mt-6 text-[12px] text-ink-500 tabular-nums">{statsLabel}</p>
+          <p className="mt-3 text-[11px] text-ink-400 tabular-nums">{statsLabel}</p>
         )}
       </header>
 
       {/* Sticky toolbar */}
       <div className="sticky top-0 z-10 border-b border-line-soft bg-paper/90 backdrop-blur-sm">
-        <div className="max-w-[768px] mx-auto px-3 sm:px-6 h-14 flex items-center gap-1.5 sm:gap-3">
+        <div className="max-w-[720px] mx-auto px-3 sm:px-6 h-14 flex items-center gap-1.5 sm:gap-3">
           <button
             onClick={onBack}
             className="p-2 text-ink-400 hover:text-ink-700 transition-colors shrink-0"
@@ -113,6 +141,7 @@ export function SearchHeader({
             />
             <input
               ref={searchRef}
+              aria-label={searchPlaceholder}
               type="text"
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
@@ -134,15 +163,31 @@ export function SearchHeader({
             )}
           </div>
 
+          {query && resultCountLabel && (
+            <span
+              className="hidden sm:block text-[11px] text-ink-400 tabular-nums whitespace-nowrap"
+              aria-live="polite"
+            >
+              {resultCountLabel}
+            </span>
+          )}
+
           <div className="flex items-center gap-0.5 shrink-0 ml-auto">
             {canAnalyzeMindset && (
               <button
                 onClick={onAnalyzeMindset}
-                className="p-2 text-ink-400 hover:text-seal rounded-lg transition-colors"
-                title={analyzeMindsetLabel}
-                aria-label={analyzeMindsetLabel}
+                className={`relative p-2 rounded-lg transition-colors ${
+                  aiReady
+                    ? "text-ink-400 hover:text-seal"
+                    : "text-ink-300 hover:text-ink-500"
+                }`}
+                title={aiReady ? analyzeMindsetLabel : aiNotConfiguredHint}
+                aria-label={aiReady ? analyzeMindsetLabel : aiNotConfiguredHint}
               >
                 <Brain size={16} />
+                {!aiReady && (
+                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-seal/70" />
+                )}
               </button>
             )}
 
@@ -157,6 +202,7 @@ export function SearchHeader({
                   }`}
                   title={moreLabel}
                   aria-label={moreLabel}
+                  aria-expanded={showMore}
                 >
                   <MoreHorizontal size={16} />
                 </button>
@@ -175,6 +221,19 @@ export function SearchHeader({
                         {selectLabel}
                       </button>
                     )}
+                    <p className="px-3 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wide text-ink-400">{filterLabel}</p>
+                    {(Object.keys(filterOptions) as Array<keyof typeof filterOptions>).map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => {
+                          setShowMore(false);
+                          onFilterChange(filter);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs transition-colors ${activeFilter === filter ? "bg-seal/10 text-seal" : "text-ink-600 hover:bg-line-soft"}`}
+                      >
+                        {filterOptions[filter]}
+                      </button>
+                    ))}
                     {canExport && (
                       <>
                         <button
@@ -199,6 +258,26 @@ export function SearchHeader({
                         </button>
                       </>
                     )}
+                    <button
+                      onClick={() => {
+                        setShowMore(false);
+                        onImport();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-ink-600 hover:bg-line-soft transition-colors"
+                    >
+                      <Upload size={13} />
+                      {importLabel}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMore(false);
+                        onOpenTrash();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-ink-600 hover:bg-line-soft transition-colors"
+                    >
+                      <Trash2 size={13} />
+                      {trashLabel}
+                    </button>
                   </div>
                 )}
               </div>

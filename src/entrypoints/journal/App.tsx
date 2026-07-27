@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Card } from "@/lib/types";
-import { updateCard } from "@/lib/storage";
+import { updateCard, saveCard, getDeletedCards, importCards, permanentlyDeleteCard, restoreDeletedCard } from "@/lib/storage";
 import {
   dayKey,
   formatTime,
@@ -10,7 +10,6 @@ import {
   formatRelativeDate,
 } from "@/lib/utils";
 import {
-  getAIConfig,
   analyzeMindset,
   type MindsetAnalysis,
 } from "@/lib/ai";
@@ -25,11 +24,13 @@ import { SettingsModal } from "@/components/journal/SettingsModal";
 import { MindsetModal } from "@/components/journal/MindsetModal";
 import { EmptyState } from "@/components/journal/EmptyState";
 import { Skeleton } from "@/components/journal/Skeleton";
+import { TrashModal } from "@/components/journal/TrashModal";
 import {
   useJournalCards,
   useSelection,
   usePendingDelete,
   useAskState,
+  useRequireAI,
 } from "./hooks";
 
 export default function App() {
@@ -60,7 +61,10 @@ export default function App() {
     handleAsk,
   } = useAskState();
 
+  const { ensureAI, aiReady } = useRequireAI(() => setShowSettings(true));
+
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "noThought" | "recent">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingThoughtId, setEditingThoughtId] = useState<string | null>(null);
   const [showMindset, setShowMindset] = useState(false);
@@ -68,8 +72,14 @@ export default function App() {
   const [mindsetLoading, setMindsetLoading] = useState(false);
   const [mindsetError, setMindsetError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [deletedCards, setDeletedCards] = useState<Card[]>([]);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const [lang, setLangState] = useState<Lang>("zh");
   const searchRef = useRef<HTMLInputElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const [revisitIndex, setRevisitIndex] = useState<number | null>(null);
 
   /** Close the current tab reliably, whether it was opened by the extension or not. */
   async function closeCurrentTab() {
@@ -206,11 +216,8 @@ export default function App() {
   };
 
   const handleAnalyzeMindset = async () => {
-    const config = await getAIConfig();
-    if (!config) {
-      setShowSettings(true);
-      return;
-    }
+    const config = await ensureAI();
+    if (!config) return;
 
     setMindsetLoading(true);
     setMindsetError(null);
@@ -224,6 +231,17 @@ export default function App() {
     } finally {
       setMindsetLoading(false);
     }
+  };
+
+  const handleSaveAnalysis = async (text: string) => {
+    await saveCard({
+      content: text,
+      source: {
+        url: chrome.runtime.getURL("journal.html"),
+        title: tr("mindsetTitle"),
+        siteName: "Glean",
+      },
+    });
   };
 
   const downloadFile = (filename: string, content: string, mime: string) => {
@@ -266,6 +284,28 @@ export default function App() {
     exportCards(format, cards);
   }, [cards, exportCards]);
 
+  const openTrash = useCallback(async () => {
+    setDeletedCards(await getDeletedCards());
+    setShowTrash(true);
+  }, []);
+
+  const handleImportFile = useCallback(async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      const payload = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === "object" && Array.isArray((parsed as { cards?: unknown }).cards)
+          ? (parsed as { cards: unknown[] }).cards
+          : null;
+      if (!payload) throw new Error("invalid");
+      const result = await importCards(payload);
+      setImportMessage(tr("importResult", { added: result.added, updated: result.updated, skipped: result.skipped }));
+    } catch {
+      setImportMessage(tr("importInvalid"));
+    }
+  }, [tr]);
+
   const handleExpand = useCallback((id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
     setEditingThoughtId(null);
@@ -283,9 +323,14 @@ export default function App() {
   }, []);
 
   const filtered = useMemo(() => {
-    if (!query) return cards;
+    const filteredByPreset = filter === "noThought"
+      ? cards.filter((card) => !card.thought?.trim())
+      : filter === "recent"
+        ? cards.filter((card) => card.createdAt >= Date.now() - 7 * 86_400_000)
+        : cards;
+    if (!query) return filteredByPreset;
     const q = query.toLowerCase();
-    return cards.filter(
+    return filteredByPreset.filter(
       (c) =>
         c.content.toLowerCase().includes(q) ||
         c.thought?.toLowerCase().includes(q) ||
@@ -293,7 +338,7 @@ export default function App() {
         c.source.siteName?.toLowerCase().includes(q) ||
         c.source.author?.toLowerCase().includes(q)
     );
-  }, [cards, query]);
+  }, [cards, query, filter]);
 
   /** Sections grouped by calendar day, newest first. */
   const sections = useMemo(() => {
@@ -333,13 +378,32 @@ export default function App() {
    * Daily revisit spotlight: deterministically resurface one entry older
    * than a week (same pick all day), once the archive has some depth.
    */
-  const revisit = useMemo(() => {
-    if (query || selectionMode || cards.length < 8) return null;
+  const revisitPool = useMemo(() => {
+    if (query || selectionMode || cards.length < 8) return [];
     const cutoff = Date.now() - 7 * 86_400_000;
-    const old = cards.filter((c) => c.createdAt < cutoff);
-    if (old.length === 0) return null;
-    return old[Math.floor(Date.now() / 86_400_000) % old.length];
+    return cards.filter((c) => c.createdAt < cutoff);
   }, [cards, query, selectionMode]);
+
+  const revisit = useMemo(() => {
+    if (revisitPool.length === 0) return null;
+    const baseIndex = Math.floor(Date.now() / 86_400_000) % revisitPool.length;
+    const index = Math.min(revisitIndex ?? baseIndex, revisitPool.length - 1);
+    return revisitPool[index];
+  }, [revisitPool, revisitIndex]);
+
+  const handleShuffleRevisit = useCallback(() => {
+    if (revisitPool.length <= 1) return;
+    setRevisitIndex((prev) => {
+      const current = prev ?? Math.floor(Date.now() / 86_400_000) % revisitPool.length;
+      let next = current;
+      let attempts = 0;
+      while (next === current && attempts < 10) {
+        next = Math.floor(Math.random() * revisitPool.length);
+        attempts++;
+      }
+      return next;
+    });
+  }, [revisitPool.length]);
 
   const toggleSelectAll = useCallback(() => {
     const allFilteredIds = new Set(filtered.map((c) => c.id));
@@ -383,31 +447,48 @@ export default function App() {
   );
 
   const onAsk = useCallback(
-    (cardId: string, question: string) => {
-      handleAsk(cardId, question, cards, lang, tr("genFail"), () => setShowSettings(true));
+    (cardId: string, question: string, scope: import("@/lib/ai").AskScope) => {
+      handleAsk(cardId, question, scope, cards, lang, tr("genFail"), () => setShowSettings(true));
     },
     [handleAsk, cards, lang],
   );
 
   return (
     <div className="min-h-screen bg-paper">
+      <input
+        ref={importRef}
+        type="file"
+        accept="application/json,.json"
+        className="sr-only"
+        onChange={(event) => {
+          void handleImportFile(event.target.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+      />
       <SearchHeader
         query={query}
         canExport={cards.length > 0}
         canSelect={cards.length > 0 && !selectionMode}
         canAnalyzeMindset={cards.length > 0}
+        aiReady={aiReady}
         searchRef={searchRef}
         onBack={handleBack}
         onQueryChange={setQuery}
         onClearQuery={() => { setQuery(""); searchRef.current?.focus(); }}
         onExport={handleExport}
         onStartSelection={() => setSelectionMode(true)}
-        onAnalyzeMindset={() => {
+        onAnalyzeMindset={async () => {
+          const config = await ensureAI();
+          if (!config) return;
           setShowMindset(true);
           setMindsetResult(null);
           setMindsetError(null);
         }}
         onOpenSettings={() => setShowSettings(true)}
+        onImport={() => importRef.current?.click()}
+        onOpenTrash={() => void openTrash()}
+        activeFilter={filter}
+        onFilterChange={setFilter}
         title={tr("title")}
         subtitle={tr("openJournal")}
         statsLabel={
@@ -426,8 +507,15 @@ export default function App() {
         selectLabel={tr("select")}
         settingsLabel={tr("settingsTitle")}
         analyzeMindsetLabel={tr("analyzeMindset")}
+        aiNotConfiguredHint={tr("aiNotConfiguredHint")}
         moreLabel={tr("showMore")}
         clearSearchLabel={tr("clearSearch")}
+        importLabel={tr("importJSON")}
+        trashLabel={tr("trash")}
+        filterLabel={tr("filter")}
+        filterOptions={{ all: tr("filterAll"), noThought: tr("filterNoThought"), recent: tr("filterRecent") }}
+        resultCount={filtered.length}
+        resultCountLabel={query || filter !== "all" ? tr("searchResults", { count: filtered.length }) : undefined}
       >
         {selectionMode && (
           <SelectionBar
@@ -449,7 +537,11 @@ export default function App() {
         )}
       </SearchHeader>
 
-      <main className="max-w-[768px] mx-auto px-4 sm:px-6 pt-4 pb-24 animate-[fade-up_.45s_ease-out_both]">
+      {importMessage && (
+        <p className="mx-auto mt-3 max-w-[720px] px-6 text-xs text-ink-600" role="status">{importMessage}</p>
+      )}
+
+      <main className="max-w-[720px] mx-auto px-4 sm:px-6 pt-3 pb-24 animate-fade-up">
         {loading ? (
           <div className="mt-8">
             <Skeleton />
@@ -464,30 +556,36 @@ export default function App() {
           />
         ) : query ? (
           <div>
-            {filtered.map((card) => (
-              <CardItem
+            {filtered.map((card, i) => (
+              <div
                 key={card.id}
-                card={card}
-                query={query}
-                lang={lang}
-                timeLabel={formatDateTime(card.createdAt, lang)}
-                expanded={expandedId === card.id}
-                selected={selectedIds.has(card.id)}
-                selectionMode={selectionMode}
-                askOpen={askCardId === card.id}
-                askExchanges={askCardId === card.id ? askExchanges : []}
-                askLoading={askCardId === card.id ? askLoading : false}
-                askError={askCardId === card.id ? askError : null}
-                editingThoughtId={editingThoughtId}
-                onToggleSelection={toggleSelection}
-                onExpand={handleExpand}
-                onDelete={onDelete}
-                onToggleAsk={onToggleAsk}
-                onAsk={onAsk}
-                onSaveThought={handleSaveThought}
-                onStartEditingThought={setEditingThoughtId}
-                onStopEditingThought={() => setEditingThoughtId(null)}
-              />
+                className="animate-journal-card-reveal"
+                style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
+              >
+                <CardItem
+                  key={card.id}
+                  card={card}
+                  query={query}
+                  lang={lang}
+                  timeLabel={formatDateTime(card.createdAt, lang)}
+                  expanded={expandedId === card.id}
+                  selected={selectedIds.has(card.id)}
+                  selectionMode={selectionMode}
+                  askOpen={askCardId === card.id}
+                  askExchanges={askCardId === card.id ? askExchanges : []}
+                  askLoading={askCardId === card.id ? askLoading : false}
+                  askError={askCardId === card.id ? askError : null}
+                  editingThoughtId={editingThoughtId}
+                  onToggleSelection={toggleSelection}
+                  onExpand={handleExpand}
+                  onDelete={onDelete}
+                  onToggleAsk={onToggleAsk}
+                  onAsk={onAsk}
+                  onSaveThought={handleSaveThought}
+                  onStartEditingThought={setEditingThoughtId}
+                  onStopEditingThought={() => setEditingThoughtId(null)}
+                />
+              </div>
             ))}
           </div>
         ) : (
@@ -499,7 +597,12 @@ export default function App() {
                 timeAgo={formatRelativeDate(revisit.createdAt, lang)}
                 title={tr("revisitTitle")}
                 jumpLabel={tr("revisitJump")}
+                shuffleLabel={tr("revisitShuffle")}
+                collapseLabel={tr("revisitCollapse")}
+                expandLabel={tr("revisitExpand")}
+                collapsedLabel={tr("revisitCollapsed")}
                 onJump={() => handleJump(revisit.id)}
+                onShuffle={revisitPool.length > 1 ? handleShuffleRevisit : undefined}
               />
             )}
 
@@ -558,30 +661,36 @@ export default function App() {
 
                     {/* Entries */}
                     <div className="min-w-0 sm:border-l sm:border-line-soft sm:pl-7">
-                      {section.cards.map((card) => (
-                        <CardItem
+                      {section.cards.map((card, i) => (
+                        <div
                           key={card.id}
-                          card={card}
-                          query={query}
-                          lang={lang}
-                          timeLabel={formatTime(card.createdAt, lang)}
-                          expanded={expandedId === card.id}
-                          selected={selectedIds.has(card.id)}
-                          selectionMode={selectionMode}
-                          askOpen={askCardId === card.id}
-                          askExchanges={askCardId === card.id ? askExchanges : []}
-                          askLoading={askCardId === card.id ? askLoading : false}
-                          askError={askCardId === card.id ? askError : null}
-                          editingThoughtId={editingThoughtId}
-                          onToggleSelection={toggleSelection}
-                          onExpand={handleExpand}
-                          onDelete={onDelete}
-                          onToggleAsk={onToggleAsk}
-                          onAsk={onAsk}
-                          onSaveThought={handleSaveThought}
-                          onStartEditingThought={setEditingThoughtId}
-                          onStopEditingThought={() => setEditingThoughtId(null)}
-                        />
+                          className="animate-journal-card-reveal"
+                          style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
+                        >
+                          <CardItem
+                            key={card.id}
+                            card={card}
+                            query={query}
+                            lang={lang}
+                            timeLabel={formatTime(card.createdAt, lang)}
+                            expanded={expandedId === card.id}
+                            selected={selectedIds.has(card.id)}
+                            selectionMode={selectionMode}
+                            askOpen={askCardId === card.id}
+                            askExchanges={askCardId === card.id ? askExchanges : []}
+                            askLoading={askCardId === card.id ? askLoading : false}
+                            askError={askCardId === card.id ? askError : null}
+                            editingThoughtId={editingThoughtId}
+                            onToggleSelection={toggleSelection}
+                            onExpand={handleExpand}
+                            onDelete={onDelete}
+                            onToggleAsk={onToggleAsk}
+                            onAsk={onAsk}
+                            onSaveThought={handleSaveThought}
+                            onStartEditingThought={setEditingThoughtId}
+                            onStopEditingThought={() => setEditingThoughtId(null)}
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -620,8 +729,11 @@ export default function App() {
         closeLabel={tr("mindsetClose")}
         emptyLabel={tr("mindsetEmpty")}
         genFail={tr("genFail")}
+        saveLabel={tr("mindsetSave")}
+        savedLabel={tr("saved")}
         onAnalyze={handleAnalyzeMindset}
         onClose={() => setShowMindset(false)}
+        onSaveAnalysis={handleSaveAnalysis}
       />
 
       {showSettings && (
@@ -633,6 +745,23 @@ export default function App() {
           settingsTitle={tr("settingsTitle")}
           settingsDesc={tr("settingsDesc")}
           cancelLabel={tr("cancel")}
+        />
+      )}
+      {showTrash && (
+        <TrashModal
+          cards={deletedCards}
+          onClose={() => setShowTrash(false)}
+          onRestore={(id) => {
+            void restoreDeletedCard(id).then(() => setDeletedCards((prev) => prev.filter((card) => card.id !== id)));
+          }}
+          onDelete={(id) => {
+            void permanentlyDeleteCard(id).then(() => setDeletedCards((prev) => prev.filter((card) => card.id !== id)));
+          }}
+          title={tr("trash")}
+          emptyLabel={tr("trashEmpty")}
+          restoreLabel={tr("restore")}
+          deleteLabel={tr("deletePermanently")}
+          closeLabel={tr("mindsetClose")}
         />
       )}
     </div>

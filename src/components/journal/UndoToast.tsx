@@ -25,7 +25,7 @@ export function UndoToast({
 }: UndoToastProps) {
   return (
     <div
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-ink-900 text-paper rounded-full pl-5 pr-4 py-2.5 shadow-xl animate-[toast-up_.25s_ease-out]"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-ink-900 text-paper rounded-full pl-5 pr-4 py-2.5 shadow-xl animate-toast-up"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >

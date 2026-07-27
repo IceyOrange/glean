@@ -1,6 +1,7 @@
-import { SyncAdapter, SyncProviderMeta, SyncProvider, ProviderConfig, isNotionConfig, isWebDAVConfig } from "./types";
+import { SyncAdapter, SyncProviderMeta, SyncProvider, ProviderConfig, isNotionConfig, isWebDAVConfig, isGistConfig } from "./types";
 import { notionAdapter } from "./notion";
 import { webdavAdapter } from "./webdav";
+import { gistAdapter } from "./gist";
 
 export const SYNC_PROVIDERS: SyncProviderMeta[] = [
   {
@@ -33,6 +34,12 @@ export const SYNC_PROVIDERS: SyncProviderMeta[] = [
       remotePath: "/Glean/",
     },
   },
+  {
+    id: "gist",
+    labelKey: "syncGist",
+    descriptionKey: "syncGistDesc",
+    defaultConfig: { provider: "gist", token: "", filename: "glean-backup.json" },
+  },
 ];
 
 const WEBDAV_PROVIDERS: SyncProvider[] = ["nutstore", "webdav"];
@@ -48,6 +55,8 @@ export function getAdapter(provider: SyncProvider): SyncAdapter<ProviderConfig> 
     case "nutstore":
     case "webdav":
       return webdavAdapter as SyncAdapter<ProviderConfig>;
+    case "gist":
+      return gistAdapter as SyncAdapter<ProviderConfig>;
     default: {
       const _exhaustive: never = provider;
       throw new Error(`Unknown provider: ${_exhaustive}`);

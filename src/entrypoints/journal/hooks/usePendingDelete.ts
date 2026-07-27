@@ -5,8 +5,11 @@ import { deleteAskHistory } from "@/lib/ai";
 import type { PendingDelete } from "@/components/journal/UndoToast";
 
 /**
- * Manages the pending-delete toast: single/batch delete with undo,
+ * Manages the pending-delete toast: single/batch soft-delete with undo,
  * auto-dismiss timer, and hover-pause behaviour.
+ *
+ * Deletion is now soft (sets deletedAt tombstone). Undo clears the tombstone.
+ * Physical removal is handled by pruneTombstones() during sync.
  */
 export function usePendingDelete() {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -43,6 +46,7 @@ export function usePendingDelete() {
       if (expandedId === id) onExpandedChange(null);
       if (askCardId === id) onAskReset();
       void deleteAskHistory(id);
+      // Soft-delete: sets deletedAt tombstone
       await deleteCard(id);
       const payload: PendingDelete = { type: "single", card, index };
       pendingDeleteRef.current = payload;
@@ -75,6 +79,7 @@ export function usePendingDelete() {
       if (expandedId && selectedIds.has(expandedId)) onExpandedChange(null);
       if (askCardId && selectedIds.has(askCardId)) onAskReset();
       void Promise.all(ids.map((id) => deleteAskHistory(id)));
+      // Soft-delete: sets deletedAt tombstone on all selected cards
       await deleteCards(ids);
 
       const payload: PendingDelete = { type: "batch", items };
@@ -92,6 +97,7 @@ export function usePendingDelete() {
     pendingDeleteRef.current = null;
     setPendingDelete(null);
     if (!pending) return;
+    // Undo: restoreCard clears the deletedAt tombstone
     if (pending.type === "batch") {
       const sorted = [...pending.items].sort((a, b) => a.index - b.index);
       for (const item of sorted) {

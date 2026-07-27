@@ -22,7 +22,7 @@ Write your thoughts right after clipping. Press Shift + Enter for a new line. Yo
 Connect to your preferred LLM (DeepSeek, OpenAI, Anthropic, Moonshot, SiliconFlow, Zhipu/BigModel, or any OpenAI-compatible endpoint) to discover patterns, connections, and new ideas across your clippings. You bring the API key — Glean does the rest.
 
 **History Journal**
-A dedicated full-page view to browse, search, edit, bulk-delete, or export all your cards. Filter by date, keyword, or source. Your personal library of ideas, always at hand.
+A dedicated full-page view to browse, search, edit, restore deleted cards, or export all your cards. Your personal library of ideas, always at hand.
 
 **Cloud Sync**
 Sync your clippings to a Notion database or back up via WebDAV / Nutstore (坚果云). Your data, your cloud.
@@ -43,9 +43,9 @@ Built-in support for English, 中文, and Français.
 ### 📋 Why These Permissions?
 
 - **Read and change all data on websites you visit** — Glean needs to detect text selections on any page so you can clip quotes from anywhere. No page content is read unless you actively select text and click the clip button.
-- **Read your browsing history** — Used to record the source page URL and title when you save a quote, providing context for each card.
 - **Storage** — To save your clippings, annotations, and settings locally on your device.
 - **Alarms** — To schedule periodic background sync tasks when you enable cloud sync.
+- **Optional site access** — When you connect an AI or sync provider, Glean requests access only to that provider's domain.
 
 ### 🌐 Links
 
@@ -79,7 +79,7 @@ Glean 是一款安静、无干扰的浏览器扩展，专为保存阅读中打�
 接入你常用的大语言模型（DeepSeek、OpenAI、Anthropic、Moonshot、SiliconFlow、智谱/BigModel，或任何 OpenAI 兼容接口），发现摘录之间的思维模式和灵感联系。你提供 API Key，Glean 负责其余。
 
 **灵感库**
-独立的 Journal 全屏页面，可浏览、搜索、编辑、批量删除或导出所有卡片。按日期、关键词或来源筛选——你的个人灵感库，随时可用。
+独立的 Journal 全屏页面，可浏览、搜索、编辑、恢复误删卡片或导出所有卡片。你的个人灵感库，随时可用。
 
 **云同步**
 将摘录同步到 Notion 数据库，或通过 WebDAV / 坚果云备份。你的数据，你的云端。
@@ -100,9 +100,9 @@ Glean 是一款安静、无干扰的浏览器扩展，专为保存阅读中打�
 ### 📋 为什么需要这些权限？
 
 - **读取和更改您访问的所有网站上的数据** — Glean 需要在任意网页检测文字选中，以便你随时摘录。除非你主动选中文字并点击摘录按钮，否则不会读取任何页面内容。
-- **读取您的浏览记录** — 用于在保存摘录时记录来源页面的 URL 和标题，为每张卡片提供上下文。
 - **存储** — 在你的设备上本地保存摘录、批注和设置。
 - **闹钟** — 在你启用云同步后，用于调度定期的后台同步任务。
+- **按需站点访问** — 连接 AI 或同步服务时，Glean 只会请求该服务域名的访问权限。
 
 ### 🌐 链接
 
