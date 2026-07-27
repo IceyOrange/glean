@@ -50,7 +50,7 @@ Built-in support for English, 中文, and Français.
 ### 🌐 Links
 
 - Source code: https://github.com/IceyOrange/glean
-- Report issues: https://github.com/IceyOrange/glean/issues
+- Feedback & support: https://glean.lovegood.cool/feedback
 - Privacy policy: https://glean.lovegood.cool/privacy
 
 ---
@@ -107,5 +107,5 @@ Glean 是一款安静、无干扰的浏览器扩展，专为保存阅读中打�
 ### 🌐 链接
 
 - 源代码：https://github.com/IceyOrange/glean
-- 问题反馈：https://github.com/IceyOrange/glean/issues
-- 隐私政策：https://iceyorange.github.io/glean/privacy
+- 反馈与支持：https://glean.lovegood.cool/feedback
+- 隐私政策：https://glean.lovegood.cool/privacy

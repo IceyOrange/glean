@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import { LanguageControl, ThemeControl, AIConfigForm } from "@/components/AISettings";
+import { FeedbackSection } from "@/components/FeedbackSection";
 import { SyncSettings } from "@/components/SyncSettings";
 import { getAIConfig } from "@/lib/ai";
 import { getAutoThought, setAutoThought } from "@/lib/preferences";
@@ -211,6 +212,10 @@ export function SettingsPanel({ lang, tr, onSetLang, onSaved }: SettingsPanelPro
         defaultOpen={false}
       >
         <SyncSettings tr={tr} />
+      </CollapsibleSection>
+
+      <CollapsibleSection label={tr("feedbackAndHelp")} defaultOpen={false}>
+        <FeedbackSection tr={tr} />
       </CollapsibleSection>
     </div>
   );

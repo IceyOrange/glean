@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Privacy policy
+    url: https://glean.lovegood.cool/privacy
+    about: Learn how Glean handles your data.
+  - name: Feedback & help
+    url: https://glean.lovegood.cool/feedback
+    about: Choose the best way to share feedback or get help.

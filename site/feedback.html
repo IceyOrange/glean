@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Glean feedback and support" />
+  <title>Glean — Feedback &amp; help</title>
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <style>
+    @font-face {
+      font-family: "Literata";
+      font-style: normal;
+      font-weight: 200 900;
+      font-display: swap;
+      src: url("./fonts/literata-latin.woff2") format("woff2");
+    }
+    :root {
+      --paper: oklch(97.4% 0.008 90);
+      --surface: oklch(99.2% 0.004 90);
+      --ink: oklch(29% 0.02 80);
+      --muted: oklch(52% 0.013 85);
+      --line: oklch(90% 0.008 90);
+      --soft: oklch(94% 0.03 40);
+      --seal: oklch(52% 0.14 38);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: oklch(25% 0.015 80);
+        --surface: oklch(29.5% 0.016 80);
+        --ink: oklch(93% 0.008 90);
+        --muted: oklch(70% 0.011 85);
+        --line: oklch(38% 0.014 82);
+        --soft: oklch(34% 0.06 40);
+        --seal: oklch(70% 0.16 38);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.55;
+    }
+    a { color: inherit; }
+    .shell { width: min(100% - 40px, 680px); margin: 0 auto; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      text-decoration: none;
+      font-family: "Literata", Georgia, serif;
+      font-size: 1.08rem;
+      font-weight: 650;
+    }
+    .seal { width: 8px; height: 8px; border-radius: 50%; background: var(--seal); }
+    .languages { display: flex; gap: 3px; }
+    .language {
+      border: 0;
+      border-radius: 6px;
+      color: var(--muted);
+      background: transparent;
+      padding: 4px 7px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.76rem;
+    }
+    .language[aria-pressed="true"] { color: var(--ink); background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+    main { padding: clamp(48px, 10vw, 88px) 0 54px; }
+    .eyebrow { margin: 0 0 12px; color: var(--seal); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+    h1 { max-width: 14ch; margin: 0; font: 500 clamp(2rem, 6vw, 3.35rem) / 1.13 "Literata", Georgia, serif; letter-spacing: -0.025em; }
+    .intro { max-width: 47ch; margin: 20px 0 38px; color: var(--muted); font-size: 1rem; }
+    .actions { display: grid; border-top: 1px solid var(--line); }
+    .action {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      padding: 19px 4px;
+      border-bottom: 1px solid var(--line);
+      text-decoration: none;
+      transition: background-color 180ms cubic-bezier(.25, 1, .5, 1), color 180ms cubic-bezier(.25, 1, .5, 1), padding 180ms cubic-bezier(.25, 1, .5, 1);
+    }
+    .action:hover { padding-inline: 12px; background: var(--surface); }
+    .action-title { display: block; margin-bottom: 3px; font-size: 0.98rem; font-weight: 650; }
+    .action-copy { display: block; max-width: 44ch; color: var(--muted); font-size: 0.86rem; }
+    .arrow { color: var(--seal); font-size: 1.25rem; }
+    .privacy {
+      display: flex;
+      gap: 11px;
+      margin-top: 35px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: color-mix(in oklch, var(--soft) 55%, var(--surface));
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+    .privacy-mark { color: var(--seal); font-family: "Literata", Georgia, serif; font-size: 1.1rem; }
+    .privacy p { margin: 0; }
+    .privacy a { color: var(--ink); text-underline-offset: 3px; }
+    .foot { padding: 20px 0 34px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; }
+    .foot a { text-underline-offset: 3px; }
+    button:focus-visible, a:focus-visible { outline: 2px solid color-mix(in oklch, var(--seal), transparent 55%); outline-offset: 3px; }
+    @media (prefers-reduced-motion: reduce) { .action { transition: none; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="./"><span class="seal"></span>Glean</a>
+      <div class="languages" aria-label="Language">
+        <button class="language" type="button" data-language="en" aria-pressed="false">EN</button>
+        <button class="language" type="button" data-language="zh" aria-pressed="true">中文</button>
+        <button class="language" type="button" data-language="fr" aria-pressed="false">FR</button>
+      </div>
+    </header>
+
+    <main>
+      <p class="eyebrow" data-i18n="eyebrow">Glean / Support</p>
+      <h1 data-i18n="title">你的每一条反馈，都能让 Glean 更好。</h1>
+      <p class="intro" data-i18n="intro">选择最适合的方式告诉我们。反馈会在 GitHub 上公开提交，因此请勿包含私密内容。</p>
+
+      <nav class="actions" aria-label="Feedback options">
+        <a class="action" href="https://github.com/IceyOrange/glean/issues/new?template=bug_report.md" target="_blank" rel="noopener noreferrer">
+          <span><strong class="action-title" data-i18n="bugTitle">报告问题</strong><span class="action-copy" data-i18n="bugCopy">某项功能没有按预期工作？附上复现步骤会很有帮助。</span></span>
+          <span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="action" href="https://github.com/IceyOrange/glean/issues/new?template=feature_request.md" target="_blank" rel="noopener noreferrer">
+          <span><strong class="action-title" data-i18n="featureTitle">建议功能</strong><span class="action-copy" data-i18n="featureCopy">告诉我们你想让阅读、摘录或整理变得更轻松的方式。</span></span>
+          <span class="arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="action" href="https://github.com/IceyOrange/glean/issues/new?template=feedback.md" target="_blank" rel="noopener noreferrer">
+          <span><strong class="action-title" data-i18n="generalTitle">分享使用感受</strong><span class="action-copy" data-i18n="generalCopy">有用、困惑或缺失之处，我们都想听听。</span></span>
+          <span class="arrow" aria-hidden="true">↗</span>
+        </a>
+      </nav>
+
+      <section class="privacy" aria-label="Privacy note">
+        <span class="privacy-mark" aria-hidden="true">◆</span>
+        <p data-i18n="privacy">请勿提交 API Key、密码、私密网页文字、私密网址，或未经脱敏的截图。Glean 不会自动附带你的摘录或浏览信息。详见 <a href="./privacy">隐私政策</a>。</p>
+      </section>
+    </main>
+
+    <footer class="foot"><span data-i18n="footer">反馈通过 GitHub 提交，可能需要登录 GitHub 账户。</span> · <a href="./privacy" data-i18n="privacyLink">隐私政策</a></footer>
+  </div>
+
+  <script>
+    const copy = {
+      en: {
+        eyebrow: "Glean / Support", title: "Every note can make Glean more useful.",
+        intro: "Choose the way that fits best. Feedback is submitted publicly on GitHub, so please keep private material out of it.",
+        bugTitle: "Report a problem", bugCopy: "Something did not work as expected? Steps to reproduce are especially helpful.",
+        featureTitle: "Suggest a feature", featureCopy: "Tell us what could make reading, clipping, or revisiting easier.",
+        generalTitle: "Share feedback", generalCopy: "Useful, unclear, or missing — we would like to hear it.",
+        privacy: "Do not submit API keys, passwords, private page text, private URLs, or unredacted screenshots. Glean never adds your clips or browsing information automatically. Read the <a href=\"./privacy\">privacy policy</a>.",
+        footer: "Feedback is submitted through GitHub and may require a GitHub sign-in.", privacyLink: "Privacy policy"
+      },
+      zh: {
+        eyebrow: "Glean / 支持", title: "你的每一条反馈，都能让 Glean 更好。",
+        intro: "选择最适合的方式告诉我们。反馈会在 GitHub 上公开提交，因此请勿包含私密内容。",
+        bugTitle: "报告问题", bugCopy: "某项功能没有按预期工作？附上复现步骤会很有帮助。",
+        featureTitle: "建议功能", featureCopy: "告诉我们你想让阅读、摘录或整理变得更轻松的方式。",
+        generalTitle: "分享使用感受", generalCopy: "有用、困惑或缺失之处，我们都想听听。",
+        privacy: "请勿提交 API Key、密码、私密网页文字、私密网址，或未经脱敏的截图。Glean 不会自动附带你的摘录或浏览信息。详见 <a href=\"./privacy\">隐私政策</a>。",
+        footer: "反馈通过 GitHub 提交，可能需要登录 GitHub 账户。", privacyLink: "隐私政策"
+      },
+      fr: {
+        eyebrow: "Glean / Assistance", title: "Chaque retour peut rendre Glean plus utile.",
+        intro: "Choisissez le canal qui vous convient. Les retours sont publiés sur GitHub : n’y mettez pas de contenu privé.",
+        bugTitle: "Signaler un problème", bugCopy: "Une fonction ne marche pas comme prévu ? Les étapes pour le reproduire sont très utiles.",
+        featureTitle: "Suggérer une fonction", featureCopy: "Dites-nous ce qui rendrait la lecture, la capture ou la relecture plus simple.",
+        generalTitle: "Partager un retour", generalCopy: "Utile, peu clair ou manquant : nous voulons le savoir.",
+        privacy: "N’envoyez ni clés API, ni mots de passe, ni texte ou URL privés, ni captures non anonymisées. Glean n’ajoute jamais automatiquement vos extraits ou votre navigation. Consultez la <a href=\"./privacy\">politique de confidentialité</a>.",
+        footer: "Les retours sont transmis via GitHub, qui peut demander une connexion.", privacyLink: "Politique de confidentialité"
+      }
+    };
+    function setLanguage(language) {
+      const strings = copy[language];
+      document.documentElement.lang = language === "zh" ? "zh-CN" : language;
+      document.querySelectorAll("[data-i18n]").forEach((element) => { element.innerHTML = strings[element.dataset.i18n]; });
+      document.querySelectorAll("[data-language]").forEach((button) => { button.setAttribute("aria-pressed", String(button.dataset.language === language)); });
+      document.title = language === "zh" ? "Glean — 反馈与帮助" : language === "fr" ? "Glean — Commentaires et aide" : "Glean — Feedback & help";
+      try { localStorage.setItem("glean-feedback-language", language); } catch (_) {}
+    }
+    document.querySelectorAll("[data-language]").forEach((button) => button.addEventListener("click", () => setLanguage(button.dataset.language)));
+    try {
+      const saved = localStorage.getItem("glean-feedback-language");
+      setLanguage(saved || (navigator.language.startsWith("zh") ? "zh" : navigator.language.startsWith("fr") ? "fr" : "en"));
+    } catch (_) { setLanguage("zh"); }
+  </script>
+</body>
+</html>
