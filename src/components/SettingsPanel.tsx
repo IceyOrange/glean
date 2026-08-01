@@ -112,7 +112,7 @@ export function Switch({
       onMouseLeave={() => setPressed(false)}
       onTouchStart={() => setPressed(true)}
       onTouchEnd={() => setPressed(false)}
-      className={`relative inline-flex items-center rounded-full ${sizing.track} transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper focus-visible:rounded-full disabled:opacity-50 disabled:cursor-not-allowed ${
+      className={`relative inline-flex items-center rounded-full after:absolute after:-inset-3 after:content-[''] ${sizing.track} transition-[background-color,transform,opacity] duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper focus-visible:rounded-full disabled:opacity-50 disabled:cursor-not-allowed ${
         checked ? "bg-ink-900" : "bg-line"
       } ${pressed ? "scale-[0.96]" : "scale-100"}`}
     >
@@ -185,7 +185,7 @@ export function SettingsPanel({ lang, tr, onSetLang, onSaved }: SettingsPanelPro
     <div className="space-y-5">
       <section>
         <SectionLabel>{tr("langLabel")}</SectionLabel>
-        <LanguageControl lang={lang} onSetLang={onSetLang} />
+        <LanguageControl lang={lang} onSetLang={onSetLang} label={tr("langLabel")} />
       </section>
 
       <section>

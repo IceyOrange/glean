@@ -64,6 +64,9 @@ cd glean
 # Install dependencies
 npm install
 
+# Enable the repository's version/build hooks (once per clone)
+npm run hooks:install
+
 # Build for Chrome (or Firefox)
 npm run build          # Chrome / Edge
 npm run build:firefox  # Firefox
@@ -110,6 +113,10 @@ npm run compile
 # Build for production
 npm run build
 
+# Finish a code change: verify, bump the local patch version, and rebuild
+# Load .output/chrome-mv3 in the browser for the latest local version
+npm run change:finish
+
 # Package as zip
 npm run zip
 ```
@@ -121,7 +128,6 @@ src/
   entrypoints/
     background.ts          # Service worker
     content.ts             # Content script (quote popup)
-    main-world-isolation.ts # Main world isolation
     journal/               # Full-page history UI
     popup/                 # Extension popup UI
   lib/
@@ -237,6 +243,9 @@ cd glean
 # 安装依赖
 npm install
 
+# 启用仓库的版本与构建钩子（每个克隆只需一次）
+npm run hooks:install
+
 # 构建 Chrome（或 Firefox）版本
 npm run build          # Chrome / Edge
 npm run build:firefox  # Firefox
@@ -283,6 +292,10 @@ npm run compile
 # 生产构建
 npm run build
 
+# 完成一次代码更新：校验、递增本地 patch 版本并重新构建
+# 浏览器请固定加载 .output/chrome-mv3，以测试最新本地版本
+npm run change:finish
+
 # 打包为 zip
 npm run zip
 ```
@@ -294,7 +307,6 @@ src/
   entrypoints/
     background.ts          # 后台服务
     content.ts             # 内容脚本（摘录弹窗）
-    main-world-isolation.ts # 主世界隔离
     journal/               # 全屏灵感库页面
     popup/                 # 弹出面板
   lib/

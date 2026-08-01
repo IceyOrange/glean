@@ -3,21 +3,92 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="How Glean stores and handles your data" />
   <title>Glean – Privacy Policy</title>
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
   <style>
-    :root { --bg: #fafafa; --text: #1a1a1a; --accent: #4a6fa5; --border: #e0e0e0; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #1a1a2e; --text: #e0e0e0; --accent: #7aa2d4; --border: #333; } }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; padding: 2rem 1rem; }
-    .container { max-width: 720px; margin: 0 auto; }
-    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
-    h1 span { color: var(--accent); }
-    .updated { color: #888; font-size: 0.85rem; margin-bottom: 2rem; }
-    h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
-    p, li { margin-bottom: 0.6rem; }
-    ul { padding-left: 1.5rem; }
-    a { color: var(--accent); }
-    .highlight { background: rgba(74,111,165,0.08); border-left: 3px solid var(--accent); padding: 0.8rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+    @font-face {
+      font-family: "Literata";
+      font-style: normal;
+      font-weight: 200 900;
+      font-display: swap;
+      src: url("./fonts/literata-latin.woff2") format("woff2");
+    }
+    :root {
+      --paper: oklch(97.4% 0.008 90);
+      --surface: oklch(99.2% 0.004 90);
+      --ink: oklch(29% 0.02 80);
+      --muted: oklch(46% 0.014 85);
+      --line: oklch(90% 0.008 90);
+      --soft: oklch(94% 0.03 40);
+      --seal: oklch(52% 0.14 38);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: oklch(25% 0.015 80);
+        --surface: oklch(29.5% 0.016 80);
+        --ink: oklch(93% 0.008 90);
+        --muted: oklch(76% 0.011 85);
+        --line: oklch(38% 0.014 82);
+        --soft: oklch(34% 0.06 40);
+        --seal: oklch(70% 0.16 38);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { color-scheme: light dark; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: clamp(32px, 7vw, 72px) 20px;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      font-size: 0.96rem;
+      line-height: 1.72;
+    }
+    .container { width: min(100%, 680px); margin: 0 auto; }
+    h1 {
+      margin: 0;
+      font: 560 clamp(2rem, 7vw, 3.2rem) / 1.12 "Literata", Georgia, serif;
+      letter-spacing: -0.025em;
+    }
+    h1 span { color: var(--seal); }
+    .updated { margin: 10px 0 38px; color: var(--muted); font-size: 0.82rem; }
+    h2 {
+      margin: 40px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      font: 600 1.08rem / 1.35 "Literata", Georgia, serif;
+      letter-spacing: -0.01em;
+    }
+    p, li { margin: 0 0 10px; }
+    ul { margin: 0; padding-inline-start: 22px; }
+    strong { font-weight: 650; }
+    a { color: var(--seal); text-underline-offset: 3px; }
+    code {
+      padding: 0.12em 0.34em;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface);
+      font-size: 0.88em;
+    }
+    .highlight {
+      margin: 22px 0 34px;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: color-mix(in oklch, var(--soft) 52%, var(--surface));
+    }
+    .highlight strong { color: var(--seal); }
+    .foot {
+      margin-top: 48px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .foot a { color: var(--ink); }
+    a:focus-visible { outline: 2px solid color-mix(in oklch, var(--seal), transparent 55%); outline-offset: 3px; }
   </style>
 </head>
 <body>
@@ -99,6 +170,8 @@
 
     <h2>10. Open Source</h2>
     <p>Glean is open-source software licensed under the MIT License. You can inspect the full source code at <a href="https://github.com/IceyOrange/glean">https://github.com/IceyOrange/glean</a> to verify our data handling practices.</p>
+
+    <footer class="foot"><a href="./">Back to Glean</a> · <a href="./feedback">Feedback &amp; support</a></footer>
   </div>
 </body>
 </html>

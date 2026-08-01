@@ -87,7 +87,7 @@ describe("storage", () => {
   });
 
   it("saveCard does not deduplicate after 5 minutes", async () => {
-    const r1 = await saveCard({ content: "same", source: { url: "u1", title: "t1" } });
+    await saveCard({ content: "same", source: { url: "u1", title: "t1" } });
     // Manually backdate the card's createdAt to simulate 6 minutes ago
     const cards = await getCards();
     const backdated: Card[] = [{ ...cards[0], createdAt: Date.now() - 6 * 60 * 1000 }];

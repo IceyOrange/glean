@@ -101,7 +101,7 @@ export default function App() {
           <button
             onClick={() => switchView("settings")}
             disabled={transitionLocked}
-            className="p-1.5 text-ink-400 hover:text-ink-700 hover:bg-surface active:bg-line-soft active:scale-[0.97] rounded-lg transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-50"
+            className="p-1.5 text-ink-400 hover:text-ink-700 hover:bg-surface active:bg-line-soft active:scale-[0.97] rounded-lg transition-[color,background-color,transform,opacity] duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-50"
             title={tr("settings")}
             aria-label={tr("settings")}
           >
@@ -117,7 +117,7 @@ export default function App() {
 
         <button
           onClick={() => openHistory()}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-ink-900 text-paper text-[13px] font-medium rounded-xl hover:bg-ink-800 active:bg-ink-700 active:scale-[0.97] transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-ink-900 text-paper text-[13px] font-medium rounded-xl hover:bg-ink-800 active:bg-ink-700 active:scale-[0.97] transition-[background-color,transform] duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
         >
           <BookOpen size={15} />
           {tr("openJournal")}
@@ -137,7 +137,7 @@ export default function App() {
               return (
                 <div
                   key={card.id}
-                  className="group cursor-pointer py-3 -mx-2 px-2 rounded-xl hover:bg-surface active:bg-line-soft/60 active:scale-[0.99] transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+                  className="group cursor-pointer py-3 -mx-2 px-2 rounded-xl hover:bg-surface active:bg-line-soft/60 active:scale-[0.99] transition-[background-color,transform] duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
                   onClick={() => openHistory(card.id)}
                   tabIndex={0}
                   role="button"
@@ -222,7 +222,7 @@ export default function App() {
         <button
           onClick={() => switchView("main")}
           disabled={transitionLocked}
-          className="p-1 text-ink-400 hover:text-ink-700 hover:bg-surface active:bg-line-soft active:scale-[0.97] rounded-lg transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-50"
+          className="p-1 text-ink-400 hover:text-ink-700 hover:bg-surface active:bg-line-soft active:scale-[0.97] rounded-lg transition-[color,background-color,transform,opacity] duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-50"
           aria-label={tr("back")}
         >
           <ChevronLeft size={18} />

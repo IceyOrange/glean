@@ -312,7 +312,6 @@ describe("validateMindsetAnalysis", () => {
   });
 
   it("throws when themes is not an array", () => {
-    const bad = { ...valid, themes: "not-array" };
     // "not-array" is a string → coerceStringArray wraps it into ["not-array"],
     // so this should actually pass. Let's test with a number instead.
     const bad2 = { ...valid, themes: 42 };

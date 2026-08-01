@@ -16,7 +16,6 @@ interface MindsetModalProps {
   retryLabel: string;
   regenerateLabel: string;
   closeLabel: string;
-  emptyLabel: string;
   genFail: string;
   saveLabel: string;
   savedLabel: string;
@@ -42,7 +41,6 @@ export function MindsetModal({
   retryLabel,
   regenerateLabel,
   closeLabel,
-  emptyLabel,
   genFail,
   saveLabel,
   savedLabel,

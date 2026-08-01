@@ -43,8 +43,6 @@ interface SearchHeaderProps {
   syncLabel: string;
   filterLabel: string;
   filterOptions: Record<"all" | "noThought" | "recent", string>;
-  /** Number of matching cards while searching. */
-  resultCount?: number;
   /** Localized label for the result count (e.g. "3 results"). */
   resultCountLabel?: string;
   /** Rendered inside the sticky bar (e.g. the selection toolbar). */
@@ -90,7 +88,6 @@ export function SearchHeader({
   syncLabel,
   filterLabel,
   filterOptions,
-  resultCount,
   resultCountLabel,
   children,
 }: SearchHeaderProps) {

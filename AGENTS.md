@@ -82,4 +82,6 @@ Access 5485k tokens of past work via get_observations([IDs]) or mem-search skill
 
 ## Delivery rule
 
-每次完成可交付改动时，必须依序完成：同步远端 `main`、执行本地生产构建、推送并确认线上发布成功、拉取发布工作流自动生成的版本提交、再次执行本地生产构建，并核对 `.output/chrome-mv3/manifest.json` 与 `package.json` 的版本一致。浏览器本地加载目录固定为 `.output/chrome-mv3`，不要使用过期的 `.output/chrome-mv3-dev`。
+每次完成代码改动后（即使不推送），必须执行 `npm run change:finish`：类型检查与测试通过后，自动递增本地 patch 版本并重新生成 Chrome 生产目录。浏览器本地加载目录固定为 `.output/chrome-mv3`，不要使用 `.output/chrome-mv3-dev`。
+
+每次发布必须依序完成：同步远端 `main`、完成代码改动并执行 `npm run change:finish`、提交业务改动、执行 `git push`。主分支的 pre-push hook 会再次递增版本、执行生产构建、提交版本文件并主动中止第一次推送；必须再次执行 `git push` 才会真正上线。随后确认 GitHub Release 成功、拉取远端最新状态、再次执行本地生产构建，并核对 `.output/chrome-mv3/manifest.json` 与 `package.json` 的版本一致。

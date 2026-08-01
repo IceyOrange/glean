@@ -1,6 +1,6 @@
 {
   "name": "glean",
-  "version": "0.2.21",
+  "version": "0.2.26",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -30,6 +30,10 @@
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
     "test": "vitest run",
+    "verify": "npm run compile && npm test",
+    "version:update": "node scripts/update-local-version.mjs",
+    "change:finish": "npm run verify && npm run version:update",
+    "hooks:install": "git config core.hooksPath .githooks",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

@@ -92,9 +92,6 @@ export async function syncCards(cards: Card[]): Promise<SyncResult> {
 
     // ── Merge ──
     const merged = mergeCards(cards, remoteCards);
-    const mergedCount = remoteCards.length > 0
-      ? merged.length - Math.max(cards.length, remoteCards.length) + remoteCards.length
-      : 0;
     // A simpler metric: how many remote cards were new/updated vs local.
     const newFromRemote = remoteCards.filter(
       (rc) => !cards.some((lc) => lc.id === rc.id)

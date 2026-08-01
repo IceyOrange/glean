@@ -1,0 +1,44 @@
+#!/bin/sh
+
+set -eu
+
+branch=$(git symbolic-ref --quiet --short HEAD || true)
+
+# Feature branches still get a production build, but only pushes from main
+# prepare a release version.
+if [ "$branch" != "main" ]; then
+  echo "Running production build before push..."
+  npm run build
+  exit 0
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Push stopped: commit or stash all tracked changes first."
+  echo "The release version is only prepared from a clean main branch."
+  exit 1
+fi
+
+state_file=$(git rev-parse --git-path glean-pre-push-state)
+head=$(git rev-parse HEAD)
+version=$(node -p 'require("./package.json").version')
+
+# A failed network push can be retried without consuming another version.
+if [ -f "$state_file" ] && [ "$(sed -n '1p' "$state_file")" = "$head:$version" ]; then
+  echo "Release v$version is already prepared; rebuilding before push..."
+  npm run build
+  exit 0
+fi
+
+echo "Preparing a fresh local version before publishing..."
+npm run version:update
+
+version=$(node -p 'require("./package.json").version')
+git add package.json package-lock.json
+git commit -m "chore(release): prepare v$version"
+
+head=$(git rev-parse HEAD)
+printf '%s\n' "$head:$version" > "$state_file"
+
+echo "Prepared v$version and committed the version files."
+echo "Push stopped once so Git can recalculate the new main ref. Run git push again."
+exit 1

@@ -3,7 +3,7 @@ import { Check, Eye, EyeOff, Monitor, Sun, Moon, AlertCircle } from "lucide-reac
 import { AIConfig, getAIConfig, saveAIConfig, apiPath } from "@/lib/ai";
 import { ensureOriginPermission } from "@/lib/permissions";
 import type { Lang } from "@/lib/i18n";
-import { Theme, getTheme, setTheme, applyTheme } from "@/lib/preferences";
+import { Theme, getTheme, setTheme } from "@/lib/preferences";
 
 const LANGS: { code: Lang; label: string }[] = [
   { code: "zh", label: "中文" },
@@ -36,17 +36,19 @@ const AI_PRESETS: AIPreset[] = [
 const VISIBLE_PRESET_COUNT = 4;
 
 const segmentedBtnBase =
-  "flex-1 py-1.5 text-xs rounded-md transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper active:scale-[0.97]";
+  "flex-1 py-1.5 text-xs rounded-md transition-[color,background-color,box-shadow,transform] duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper active:scale-[0.97]";
 
 export function LanguageControl({
   lang,
   onSetLang,
+  label,
 }: {
   lang: Lang;
   onSetLang: (l: Lang) => void;
+  label: string;
 }) {
   return (
-    <div className="flex gap-1 bg-line-soft rounded-lg p-1" role="group" aria-label="Language">
+    <div className="flex gap-1 bg-line-soft rounded-lg p-1" role="group" aria-label={label}>
       {LANGS.map((l) => (
         <button
           key={l.code}
@@ -215,12 +217,12 @@ export function AIConfigForm({
     : null;
 
   const inputCls =
-    "w-full px-3 py-2 text-sm bg-surface rounded-lg border border-line outline-none transition-all duration-200 hover:border-ink-300/40 focus:border-seal/50 focus:ring-[3px] focus:ring-seal/15 placeholder:text-ink-300 text-ink-900";
+    "w-full px-3 py-2 text-sm bg-surface rounded-lg border border-line outline-none transition-[border-color,box-shadow] duration-200 hover:border-ink-300/40 focus:border-seal/50 focus:ring-[3px] focus:ring-seal/15 placeholder:text-ink-300 text-ink-900";
 
   const errorInputCls = "border-seal focus:border-seal focus:ring-seal/25";
 
   const presetBtnBase =
-    "px-2 py-1.5 text-[10px] leading-none rounded-md transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper active:scale-[0.97]";
+    "px-2 py-1.5 text-[10px] leading-none rounded-md transition-[color,background-color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper active:scale-[0.97]";
 
   const form = (
     <div className={framed ? "space-y-3" : "space-y-4"}>
@@ -358,7 +360,7 @@ export function AIConfigForm({
         <button
           onClick={handleSaveConfig}
           disabled={!apiKeyInput.trim()}
-          className="flex items-center gap-1 px-4 py-2 text-xs font-medium text-paper bg-ink-900 rounded-lg disabled:opacity-40 hover:bg-ink-800 active:scale-[0.97] active:bg-ink-700 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+          className="flex items-center gap-1 px-4 py-2 text-xs font-medium text-paper bg-ink-900 rounded-lg disabled:opacity-40 hover:bg-ink-800 active:scale-[0.97] active:bg-ink-700 transition-[background-color,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
         >
           {configSaved ? <><Check size={12} /> {tr("saved")}</> : tr("save")}
         </button>
@@ -366,7 +368,7 @@ export function AIConfigForm({
           <button
             onClick={handleTest}
             disabled={testing}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-ink-600 bg-surface rounded-lg border border-line hover:border-ink-300 hover:bg-line-soft/40 disabled:opacity-50 active:scale-[0.97] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-ink-600 bg-surface rounded-lg border border-line hover:border-ink-300 hover:bg-line-soft/40 disabled:opacity-50 active:scale-[0.97] transition-[color,background-color,border-color,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
           >
             {testing ? (
               <span className="w-3 h-3 border border-line border-t-ink-600 rounded-full animate-spin" />

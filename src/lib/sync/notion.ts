@@ -1,5 +1,5 @@
 import { Card } from "@/lib/types";
-import { SyncAdapter, SyncResult, PullResult, NotionConfig } from "./types";
+import { SyncAdapter, NotionConfig } from "./types";
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";

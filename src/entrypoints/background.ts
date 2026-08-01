@@ -15,8 +15,6 @@ function runSync(): Promise<SyncResult> {
 }
 
 export default defineBackground(() => {
-  console.log("Glean background started");
-
   // Open a tab from content scripts (which can't call chrome.tabs directly).
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === "openTab" && msg.url) {

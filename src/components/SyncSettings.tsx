@@ -50,6 +50,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
   const [gistSearchLoading, setGistSearchLoading] = useState(false);
   const [gistSearchResults, setGistSearchResults] = useState<Array<{ id: string; title: string }>>([]);
   const [gistSearchError, setGistSearchError] = useState<string | null>(null);
+  const [showGistGuide, setShowGistGuide] = useState(false);
   const [manualGistId, setManualGistId] = useState(false);
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
   });
 
   const updateConfig = (patch: Partial<SavedSyncConfig>) => {
+    setResult(null);
     setConfig((prev) => {
       const next = { ...(prev ?? makeFallback()), ...patch };
       void saveSyncConfig(next);
@@ -87,6 +89,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
   const updateProviderConfig = (
     patch: Partial<Omit<NotionConfig, "provider">> | Partial<Omit<WebDAVConfig, "provider">> | Partial<Omit<GistConfig, "provider">>
   ) => {
+    setResult(null);
     setConfig((prev) => {
       // Never drop edits while the saved config is still loading (prev ===
       // null) — a controlled input whose onChange is dropped looks exactly
@@ -139,13 +142,18 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
 
     setLoading(true);
     setResult(null);
-    const res = await requestSync();
-    setResult(res);
-    setLoading(false);
+    try {
+      const res = await requestSync();
+      setResult(res);
 
-    // Refresh saved config to pick up lastSyncAt / lastError.
-    const saved = await getSyncConfig();
-    if (saved) setConfig(saved);
+      // Refresh saved config to pick up lastSyncAt / lastError.
+      const saved = await getSyncConfig();
+      if (saved) setConfig(saved);
+    } catch {
+      setResult({ ok: false, error: tr("syncUnexpectedError") });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSearchDatabases = async () => {
@@ -223,15 +231,12 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
   }, [provider, providerConfig, dbSearchLoading, dbSearchResults.length, dbSearchError, gistSearchLoading, gistSearchResults.length, gistSearchError]);
 
   const inputCls =
-    "w-full px-3 py-2 text-sm bg-surface rounded-lg border border-line outline-none transition-all duration-200 hover:border-ink-300/40 focus:border-seal/50 focus:ring-[3px] focus:ring-seal/15 placeholder:text-ink-300 text-ink-900 appearance-none";
+    "w-full px-3 py-2 text-sm bg-surface rounded-lg border border-line outline-none transition-[border-color,box-shadow] duration-200 hover:border-ink-300/40 focus:border-seal/50 focus:ring-[3px] focus:ring-seal/15 placeholder:text-ink-300 text-ink-900 appearance-none";
 
   const selectCls = `${inputCls} pr-8 py-1.5 text-xs`;
 
-  const linkBtnBase =
-    "flex items-center gap-1.5 w-full px-2.5 py-1.5 text-[11px] text-ink-700 bg-paper border border-line-soft rounded-lg hover:bg-line-soft/60 hover:border-ink-300/30 active:scale-[0.97] transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper";
-
   const actionBtnBase =
-    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed";
+    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-[color,background-color,border-color,transform,opacity] duration-200 ease-out-quint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed";
 
   const notionToken = isNotionConfig(providerConfig) ? providerConfig.token : "";
   const notionDbId = isNotionConfig(providerConfig) ? (providerConfig.databaseId ?? "") : "";
@@ -246,10 +251,11 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-ink-600">
           <Cloud size={14} />
-          <span className="text-xs font-medium">{tr("syncProvider")}</span>
+          <label htmlFor="sync-provider" className="text-xs font-medium">{tr("syncProvider")}</label>
         </div>
         <div className="relative w-44">
           <select
+            id="sync-provider"
             value={provider}
             onChange={(e) => handleProviderChange(e.target.value as SyncProvider)}
             className={selectCls}
@@ -272,6 +278,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
           {/* Setup wizard — three linear steps */}
           <div className="bg-paper border border-line-soft rounded-xl p-3 space-y-2 transition-colors duration-200">
             <button
+              type="button"
               onClick={() => setShowGuide((v) => !v)}
               className="flex items-center gap-1 w-full text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper rounded-lg"
               aria-expanded={showGuide}
@@ -283,26 +290,50 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
               />
             </button>
             {showGuide && (
-              <div className="space-y-1.5 animate-status-pop">
+              <div className="space-y-2.5 animate-status-pop">
+                <ol className="space-y-2" aria-label={tr("syncNotionGuide")}>
+                  <li className="grid grid-cols-[16px_1fr] gap-2">
+                    <span className="pt-px text-[10px] font-semibold tabular-nums text-seal" aria-hidden="true">1</span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <p className="text-[11px] font-medium text-ink-700">{tr("syncNotionCreateIntegration")}</p>
+                        <a
+                          href="https://www.notion.so/my-integrations/new"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-sm text-[10px] font-medium text-seal hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40"
+                        >
+                          {tr("syncNotionOpenIntegration")}
+                          <ExternalLink size={10} aria-hidden="true" />
+                        </a>
+                      </div>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-ink-400">{tr("syncNotionCreateIntegrationHint")}</p>
+                    </div>
+                  </li>
+                  <li className="grid grid-cols-[16px_1fr] gap-2">
+                    <span className="pt-px text-[10px] font-semibold tabular-nums text-seal" aria-hidden="true">2</span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-ink-700">{tr("syncNotionCopyToken")}</p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-ink-400">{tr("syncNotionCopyTokenHint")}</p>
+                    </div>
+                  </li>
+                  <li className="grid grid-cols-[16px_1fr] gap-2">
+                    <span className="pt-px text-[10px] font-semibold tabular-nums text-seal" aria-hidden="true">3</span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-ink-700">{tr("syncNotionSelectDbStep")}</p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-ink-400">{tr("syncNotionConnectDbHint")}</p>
+                    </div>
+                  </li>
+                </ol>
                 <a
-                  href="https://www.notion.so/my-integrations/new"
+                  href="https://developers.notion.com/guides/get-started/internal-connections"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={linkBtnBase}
+                  className="inline-flex items-center gap-1 rounded-sm text-[10px] text-ink-400 hover:text-ink-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40"
                 >
-                  <span>{tr("syncNotionCreateIntegration")}</span>
-                  <ExternalLink size={10} className="ml-auto text-ink-400" />
+                  {tr("syncNotionOfficialGuide")}
+                  <ExternalLink size={10} aria-hidden="true" />
                 </a>
-                <a
-                  href="https://www.notion.so/my-integrations"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={linkBtnBase}
-                >
-                  <span>{tr("syncNotionCopyToken")}</span>
-                  <ExternalLink size={10} className="ml-auto text-ink-400" />
-                </a>
-                <p className="text-[10px] text-ink-400 pl-0.5 pt-0.5">{tr("syncNotionSelectDbStep")}</p>
               </div>
             )}
           </div>
@@ -321,8 +352,14 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
                 setDbSearchError(null);
               }}
               placeholder="secret_..."
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby="sync-notion-token-hint"
               className={inputCls}
             />
+            <p id="sync-notion-token-hint" className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+              {tr("syncNotionTokenHint")}
+            </p>
           </div>
 
           {/* Database selection */}
@@ -331,6 +368,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
               <label htmlFor="sync-notion-db" className="text-xs text-ink-600">{tr("syncDatabaseId")}</label>
               {notionToken.trim() && (
                 <button
+                  type="button"
                   onClick={handleSearchDatabases}
                   disabled={dbSearchLoading}
                   className="flex items-center gap-1 text-[10px] font-medium text-seal hover:text-seal/80 hover:underline disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-1 focus-visible:ring-offset-paper rounded-sm"
@@ -386,10 +424,10 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             )}
 
             {dbSearchLoading && (
-              <p className="text-[10px] text-ink-400 mt-1.5 animate-status-pop">{tr("syncNotionSearchingDb")}</p>
+              <p className="text-[10px] text-ink-400 mt-1.5 animate-status-pop" role="status">{tr("syncNotionSearchingDb")}</p>
             )}
             {dbSearchError && (
-              <p className="text-[10px] text-seal mt-1.5 animate-status-pop">{dbSearchError}</p>
+              <p className="text-[10px] text-seal mt-1.5 animate-status-pop" role="alert">{dbSearchError}</p>
             )}
             {!notionDbId && !dbSearchLoading && (
               <p className="text-[10px] text-ink-400 mt-1.5">{tr("syncNotionDbAutoHint")}</p>
@@ -403,25 +441,65 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
         <div className="space-y-3">
           {/* Setup wizard — three linear steps */}
           <div className="bg-paper border border-line-soft rounded-xl p-3 space-y-2 transition-colors duration-200">
-            <a
-              href="https://github.com/settings/personal-access-tokens/new"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={linkBtnBase}
+            <button
+              type="button"
+              onClick={() => setShowGistGuide((value) => !value)}
+              className="flex items-center gap-1 w-full text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-paper rounded-lg"
+              aria-expanded={showGistGuide}
             >
-              <span>{tr("syncGistCreateToken")}</span>
-              <ExternalLink size={10} className="ml-auto text-ink-400" />
-            </a>
-            <a
-              href="https://github.com/settings/personal-access-tokens"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={linkBtnBase}
-            >
-              <span>{tr("syncGistCopyToken")}</span>
-              <ExternalLink size={10} className="ml-auto text-ink-400" />
-            </a>
-            <p className="text-[10px] text-ink-400 pl-0.5 pt-0.5">{tr("syncGistSelectGistHint")}</p>
+              <span className="text-[11px] font-medium text-ink-600">{tr("syncGistGuide")}</span>
+              <ChevronDown
+                size={12}
+                className={`text-ink-400 transition-transform duration-200 ease-out-quint ${showGistGuide ? "rotate-0" : "-rotate-90"}`}
+              />
+            </button>
+            {showGistGuide && (
+              <div className="space-y-2.5 animate-status-pop">
+                <ol className="space-y-2" aria-label={tr("syncGistGuide")}>
+                  <li className="grid grid-cols-[16px_1fr] gap-2">
+                    <span className="pt-px text-[10px] font-semibold tabular-nums text-seal" aria-hidden="true">1</span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <p className="text-[11px] font-medium text-ink-700">{tr("syncGistCreateToken")}</p>
+                        <a
+                          href="https://github.com/settings/personal-access-tokens/new?name=Glean+Sync&amp;description=Sync+Glean+cards+to+a+private+Gist&amp;gists=write"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-sm text-[10px] font-medium text-seal hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40"
+                        >
+                          {tr("syncGistOpenToken")}
+                          <ExternalLink size={10} aria-hidden="true" />
+                        </a>
+                      </div>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-ink-400">{tr("syncGistCreateTokenHint")}</p>
+                    </div>
+                  </li>
+                  <li className="grid grid-cols-[16px_1fr] gap-2">
+                    <span className="pt-px text-[10px] font-semibold tabular-nums text-seal" aria-hidden="true">2</span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-ink-700">{tr("syncGistCopyToken")}</p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-ink-400">{tr("syncGistCopyTokenHint")}</p>
+                    </div>
+                  </li>
+                  <li className="grid grid-cols-[16px_1fr] gap-2">
+                    <span className="pt-px text-[10px] font-semibold tabular-nums text-seal" aria-hidden="true">3</span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-ink-700">{tr("syncGistSelectGist")}</p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-ink-400">{tr("syncGistSelectGistHint")}</p>
+                    </div>
+                  </li>
+                </ol>
+                <a
+                  href="https://docs.github.com/en/rest/gists/gists"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-sm text-[10px] text-ink-400 hover:text-ink-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-seal/40"
+                >
+                  {tr("syncGistOfficialGuide")}
+                  <ExternalLink size={10} aria-hidden="true" />
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Token input */}
@@ -437,8 +515,14 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
                 setGistSearchError(null);
               }}
               placeholder="github_pat_…"
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby="sync-gist-token-hint"
               className={inputCls}
             />
+            <p id="sync-gist-token-hint" className="mt-1.5 text-[10px] leading-relaxed text-ink-400">
+              {tr("syncGistTokenHint")}
+            </p>
           </div>
 
           {/* Gist selection */}
@@ -486,7 +570,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
                   type="text"
                   value={gistId}
                   onChange={(e) => updateProviderConfig({ gistId: e.target.value || undefined })}
-                  placeholder="gist id (可选)"
+                  placeholder={tr("syncGistIdPlaceholder")}
                   className={inputCls}
                 />
                 {gistSearchResults.length > 0 && manualGistId && (
@@ -501,10 +585,10 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
             )}
 
             {gistSearchLoading && (
-              <p className="text-[10px] text-ink-400 mt-1.5 animate-status-pop">{tr("syncGistSearching")}</p>
+              <p role="status" className="text-[10px] text-ink-400 mt-1.5 animate-status-pop">{tr("syncGistSearching")}</p>
             )}
             {gistSearchError && (
-              <p className="text-[10px] text-seal mt-1.5 animate-status-pop">{gistSearchError}</p>
+              <p role="alert" className="text-[10px] text-seal mt-1.5 animate-status-pop">{gistSearchError}</p>
             )}
             {!gistId && (
               <p className="text-[10px] text-ink-400 mt-1.5">{tr("syncGistAutoCreate")}</p>
@@ -583,6 +667,7 @@ export function SyncSettings({ tr }: SyncSettingsProps) {
           <span className="text-xs text-ink-600">{tr("syncEnable")}</span>
         </div>
         <button
+          type="button"
           onClick={handleSync}
           disabled={loading}
           className={`${actionBtnBase} text-paper bg-ink-900 hover:bg-ink-800`}

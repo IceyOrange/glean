@@ -1,5 +1,5 @@
 import { Card } from "@/lib/types";
-import { SyncAdapter, SyncResult, PullResult, WebDAVConfig } from "./types";
+import { SyncAdapter, WebDAVConfig } from "./types";
 
 function normalizeUrl(serverUrl: string, remotePath: string, filename: string): string {
   const base = serverUrl.replace(/\/$/, "");

@@ -566,7 +566,6 @@ export default function App() {
         syncLabel={tr("syncNow")}
         filterLabel={tr("filter")}
         filterOptions={{ all: tr("filterAll"), noThought: tr("filterNoThought"), recent: tr("filterRecent") }}
-        resultCount={filtered.length}
         resultCountLabel={query || filter !== "all" ? tr("searchResults", { count: filtered.length }) : undefined}
       >
         {selectionMode && (
@@ -782,7 +781,6 @@ export default function App() {
         retryLabel={tr("mindsetRetry")}
         regenerateLabel={tr("mindsetRegenerate")}
         closeLabel={tr("mindsetClose")}
-        emptyLabel={tr("mindsetEmpty")}
         genFail={tr("genFail")}
         saveLabel={tr("mindsetSave")}
         savedLabel={tr("saved")}

@@ -1,5 +1,5 @@
 import { Card } from "@/lib/types";
-import { SyncAdapter, SyncResult, PullResult, GistConfig } from "./types";
+import { SyncAdapter, GistConfig } from "./types";
 
 const GITHUB_API = "https://api.github.com";
 

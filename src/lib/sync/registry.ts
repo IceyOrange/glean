@@ -1,4 +1,4 @@
-import { SyncAdapter, SyncProviderMeta, SyncProvider, ProviderConfig, isNotionConfig, isWebDAVConfig, isGistConfig } from "./types";
+import { SyncAdapter, SyncProviderMeta, SyncProvider, ProviderConfig } from "./types";
 import { notionAdapter } from "./notion";
 import { webdavAdapter } from "./webdav";
 import { gistAdapter } from "./gist";

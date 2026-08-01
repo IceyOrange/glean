@@ -134,7 +134,6 @@ export async function getSyncConfig(): Promise<SavedSyncConfig | null> {
     // Decrypt secrets for each provider in providerConfigs
     for (const [key, cfg] of Object.entries(raw.providerConfigs)) {
       if (!cfg) continue;
-      const providerKey = key as SyncProvider;
       const pSecrets = new Map<string, string>();
       if (isNotionConfig(cfg)) {
         const token = await getSecret<string>(SECRET_KEY_NOTION_TOKEN);

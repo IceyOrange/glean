@@ -413,7 +413,6 @@ export const CardItem = memo(function CardItem({
               placeholder={tr("askPlaceholder")}
               submitLabel={tr("askSubmit")}
               collapseLabel={tr("askCollapse")}
-              loadingLabel={tr("askLoading")}
               retryLabel={tr("askRetry")}
               emptyHint={tr("askEmptyHint")}
               errorHint={tr("askErrorHint")}

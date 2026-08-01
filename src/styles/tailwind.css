@@ -149,6 +149,17 @@
     background: transparent;
   }
 
+  /* Keep compact desktop controls while meeting touch-target guidance. */
+  @media (hover: none) and (pointer: coarse) {
+    button:not([role="switch"]),
+    [role="button"],
+    input,
+    select,
+    textarea {
+      min-height: 44px;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

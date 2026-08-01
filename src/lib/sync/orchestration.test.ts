@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { syncCards } from "./index";
-import { saveAllCards, pruneTombstones } from "@/lib/storage";
+import { saveAllCards } from "@/lib/storage";
 import { getAdapter } from "./registry";
 import { getSyncConfig, saveSyncConfig } from "./storage";
 import { Card } from "@/lib/types";

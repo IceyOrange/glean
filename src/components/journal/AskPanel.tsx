@@ -10,7 +10,6 @@ interface AskPanelProps {
   placeholder: string;
   submitLabel: string;
   collapseLabel: string;
-  loadingLabel: string;
   retryLabel: string;
   emptyHint: string;
   errorHint: string;
@@ -28,7 +27,6 @@ export function AskPanel({
   placeholder,
   submitLabel,
   collapseLabel,
-  loadingLabel,
   retryLabel,
   emptyHint,
   errorHint,
