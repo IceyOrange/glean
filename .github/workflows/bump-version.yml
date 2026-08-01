@@ -30,7 +30,10 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "version=v$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test -n "$version"
+          echo "version=v$version" >> "$GITHUB_OUTPUT"
 
       - name: Check release version is new
         run: |
